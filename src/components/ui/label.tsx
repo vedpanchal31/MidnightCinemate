@@ -1,0 +1,27 @@
+"use client"
+
+import * as React from "react"
+import { cn } from "@/lib/utils"
+
+const Label = React.forwardRef<
+  HTMLLabelElement,
+  React.LabelHTMLAttributes<HTMLLabelElement>
+>(({ className, ...props }, ref) => (
+  <label
+    ref={ref}
+    className={cn(
+      // Base styles
+      "text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70",
+      // Theme colors
+      "text-zinc-300",
+      // Hover states for clickable labels
+      "hover:text-zinc-200 transition-colors duration-200",
+      "cursor-pointer",
+      className
+    )}
+    {...props}
+  />
+))
+Label.displayName = "Label"
+
+export { Label }
