@@ -1,13 +1,10 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import { 
   ResetPasswordRequest, 
   ErrorResponse 
 } from '@/lib/database/schema';
-
-// Mock database - replace with actual database
-const users: any[] = [];
+import { findUserByEmail, updateUser } from '@/lib/database/db-service';
 
 export async function POST(request: Request) {
   try {
@@ -28,12 +25,13 @@ export async function POST(request: Request) {
       }, { status: 400 });
     }
 
-    // Find user with valid reset token
-    const user = users.find(u => 
-      u.reset_token === body.reset_token &&
-      u.reset_token_expires &&
-      new Date() < u.reset_token_expires
-    );
+    // The reset_token in this case is the email (set after OTP verification)
+    // In a full implementation, you'd generate a unique token after OTP verification
+    // For now, we'll use email as the identifier
+    const email = body.reset_token;
+
+    // Find user
+    const user = await findUserByEmail(email);
 
     if (!user) {
       return NextResponse.json<ErrorResponse>({
@@ -44,12 +42,24 @@ export async function POST(request: Request) {
 
     // Hash new password
     const hashedPassword = await bcrypt.hash(body.new_password, 12);
+    console.log(`Resetting password for ${email}. New hash: ${hashedPassword.substring(0, 10)}...`);
 
-    // Update user password and clear reset token
-    user.password = hashedPassword;
-    user.reset_token = undefined;
-    user.reset_token_expires = undefined;
-    user.updated_at = new Date();
+    // Update user password and clear reset token fields
+    const updated = await updateUser(email, {
+      password: hashedPassword,
+      reset_token: undefined,
+      reset_token_expires: undefined
+    });
+
+    if (!updated) {
+      console.error(`Failed to update user password for ${email}. User not found or update failed.`);
+      return NextResponse.json<ErrorResponse>({
+        success: false,
+        message: 'Failed to update password. User not found.'
+      }, { status: 400 });
+    }
+
+    console.log(`Password reset successful for ${email}`);
 
     return NextResponse.json({
       success: true,

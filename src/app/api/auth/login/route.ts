@@ -8,7 +8,7 @@ import {
 } from '@/lib/database/schema';
 import { sendOTPEmail } from '@/lib/email/smtp';
 import { generateOTP, validateEmail } from '@/lib/utils/auth';
-import { findUserByEmail, updateUser, mockOTPs } from '@/lib/database/mock-db';
+import { findUserByEmail, updateUser, createOTP } from '@/lib/database/db-service';
 
 export async function POST(request: Request) {
   try {
@@ -30,8 +30,9 @@ export async function POST(request: Request) {
     }
 
     // Find user
-    const user = findUserByEmail(body.email);
+    const user = await findUserByEmail(body.email);
     if (!user) {
+      console.log('Login failed: User not found for email:', body.email);
       return NextResponse.json<ErrorResponse>({
         success: false,
         message: 'Invalid credentials'
@@ -47,7 +48,13 @@ export async function POST(request: Request) {
     }
 
     // Verify password
+    console.log('Verifying password for user:', user.email);
+    console.log('Stored hash:', user.password ? user.password.substring(0, 10) + '...' : 'null');
+    console.log('Input password length:', body.password.length);
+    
     const isPasswordValid = await bcrypt.compare(body.password, user.password);
+    console.log('Password valid:', isPasswordValid);
+
     if (!isPasswordValid) {
       return NextResponse.json<ErrorResponse>({
         success: false,
@@ -59,18 +66,12 @@ export async function POST(request: Request) {
     if (!user.is_email_verified) {
       // Generate new OTP for email verification
       const otpCode = generateOTP();
-      const otp = {
-        id: 'mock_otp_id',
+      await createOTP({
         email: body.email,
         code: otpCode,
         type: OTPType.EMAIL_VERIFICATION,
-        expires_at: new Date(Date.now() + 10 * 60 * 1000), // 10 minutes
-        attempts: 0,
-        is_used: false,
-        created_at: new Date()
-      };
-
-      mockOTPs.push(otp);
+        expires_at: new Date(Date.now() + 10 * 60 * 1000) // 10 minutes
+      });
 
       // Send OTP email
       await sendOTPEmail(body.email, otpCode, OTPType.EMAIL_VERIFICATION, user.name);
@@ -84,8 +85,8 @@ export async function POST(request: Request) {
             email: user.email,
             name: user.name,
             is_email_verified: user.is_email_verified,
-            created_at: user.created_at,
-            updated_at: user.updated_at,
+            created_at: user.createdAt,
+            updated_at: user.updatedAt,
             is_active: user.is_active,
             last_login: user.last_login
           },
@@ -103,7 +104,7 @@ export async function POST(request: Request) {
     const refreshToken = `mock_refresh_token_${Date.now()}`;
 
     // Update last login
-    updateUser(body.email, { last_login: new Date() });
+    await updateUser(body.email, { last_login: new Date() });
 
     const response: LoginResponse = {
       success: true,
@@ -114,8 +115,8 @@ export async function POST(request: Request) {
           email: user.email,
           name: user.name,
           is_email_verified: user.is_email_verified,
-          created_at: user.created_at,
-          updated_at: user.updated_at,
+          created_at: user.createdAt,
+          updated_at: user.updatedAt,
           is_active: user.is_active,
           last_login: user.last_login
         },

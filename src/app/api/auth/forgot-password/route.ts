@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextResponse } from 'next/server';
 import {
   ForgotPasswordRequest,
@@ -8,9 +7,7 @@ import {
 } from '@/lib/database/schema';
 import { sendOTPEmail } from '@/lib/email/smtp';
 import { generateOTP } from '@/lib/utils/auth';
-
-// Mock database - replace with actual database
-const users: any[] = [];
+import { findUserByEmail, createOTP } from '@/lib/database/db-service';
 
 export async function POST(request: Request) {
   try {
@@ -25,23 +22,33 @@ export async function POST(request: Request) {
     }
 
     // Find user
-    const user = users.find(u => u.email === body.email);
+    const user = await findUserByEmail(body.email);
     if (!user) {
       // Don't reveal if email exists or not for security
-      return NextResponse.json<ErrorResponse>({
-        success: false,
-        message: 'If an account with this email exists, you will receive a reset code.'
+      // Still return success to prevent email enumeration attacks
+      return NextResponse.json<OTPResponse>({
+        success: true,
+        message: 'If an account with this email exists, you will receive a reset code.',
+        data: {
+          email: body.email,
+          type: OTPType.PASSWORD_RESET
+        }
       }, { status: 200 });
     }
 
     // Generate OTP for password reset
     const otpCode = generateOTP();
 
-    // In a real implementation, store this in database
-    // For now, just send the email with OTP
+    // Store OTP in database
+    await createOTP({
+      email: body.email,
+      code: otpCode,
+      type: OTPType.PASSWORD_RESET,
+      expires_at: new Date(Date.now() + 10 * 60 * 1000) // 10 minutes
+    });
 
     // Send OTP email
-    const emailSent = await sendOTPEmail(body.email, otpCode, OTPType.PASSWORD_RESET, user?.name || 'User');
+    const emailSent = await sendOTPEmail(body.email, otpCode, OTPType.PASSWORD_RESET, user.name);
 
     if (!emailSent) {
       return NextResponse.json<ErrorResponse>({
@@ -52,7 +59,7 @@ export async function POST(request: Request) {
 
     const response: OTPResponse = {
       success: true,
-      message: 'If an account with this email exists, you will receive a reset code.',
+      message: 'Reset code sent successfully. Please check your email.',
       data: {
         email: body.email,
         type: OTPType.PASSWORD_RESET

@@ -1,7 +1,5 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
-import { v4 as uuidv4 } from 'uuid';
 import {
   SignUpRequest,
   OTPType,
@@ -10,10 +8,7 @@ import {
 } from '@/lib/database/schema';
 import { sendOTPEmail } from '@/lib/email/smtp';
 import { generateOTP, validateEmail } from '@/lib/utils/auth';
-
-// Mock database - replace with actual database
-const users: any[] = [];
-const otps: any[] = [];
+import { findUserByEmail, createUser, createOTP } from '@/lib/database/db-service';
 
 export async function POST(request: Request) {
   try {
@@ -42,7 +37,7 @@ export async function POST(request: Request) {
     }
 
     // Check if user already exists
-    const existingUser = users.find(user => user.email === body.email);
+    const existingUser = await findUserByEmail(body.email);
     if (existingUser) {
       return NextResponse.json<ErrorResponse>({
         success: false,
@@ -53,34 +48,21 @@ export async function POST(request: Request) {
     // Hash password
     const hashedPassword = await bcrypt.hash(body.password, 12);
 
-    // Create user
-    const user = {
-      id: uuidv4(),
+    // Create user in database
+    await createUser({
       email: body.email,
       password: hashedPassword,
-      name: body.name,
-      is_email_verified: false,
-      created_at: new Date(),
-      updated_at: new Date(),
-      is_active: true
-    };
-
-    users.push(user);
+      name: body.name
+    });
 
     // Generate OTP for email verification
     const otpCode = generateOTP();
-    const otp = {
-      id: uuidv4(),
+    await createOTP({
       email: body.email,
       code: otpCode,
       type: OTPType.EMAIL_VERIFICATION,
-      expires_at: new Date(Date.now() + 10 * 60 * 1000), // 10 minutes
-      attempts: 0,
-      is_used: false,
-      created_at: new Date()
-    };
-
-    otps.push(otp);
+      expires_at: new Date(Date.now() + 10 * 60 * 1000) // 10 minutes
+    });
 
     // Send OTP email
     await sendOTPEmail(body.email, otpCode, OTPType.EMAIL_VERIFICATION, body.name);

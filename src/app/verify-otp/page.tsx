@@ -20,9 +20,15 @@ import {
 import { showToast } from "@/lib/toast";
 import { useVerifyOTPMutation, useResendOTPMutation } from "@/store/authApi";
 import { useDispatch, useSelector } from "react-redux";
-import { clearOTPState } from "@/store/authSlice";
+import {
+  clearOTPState,
+  setEmail,
+  startResendCooldown,
+  decrementResendCooldown
+} from "@/store/authSlice";
 import { RootState } from "@/store/store";
 import { OTPType } from "@/lib/database/schema";
+import { handleError } from "@/helpers/HelperFunction";
 
 export default function VerifyOTPPage() {
   const router = useRouter();
@@ -31,17 +37,50 @@ export default function VerifyOTPPage() {
   const [verifyOTP] = useVerifyOTPMutation();
   const [resendOTP] = useResendOTPMutation();
   const dispatch = useDispatch();
+
   const email = useSelector((state: RootState) => (state.auth as any).email);
+  const resendOTPTimer = useSelector((state: RootState) => (state.auth as any).resendOTPTimer);
 
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
   const [isVerifying, setIsVerifying] = useState(false);
   const [isResending, setIsResending] = useState(false);
-  const [timeLeft, setTimeLeft] = useState(60);
   const [isVerified, setIsVerified] = useState(false);
   const [errors, setErrors] = useState({
     otp: "",
     general: "",
   });
+
+  // Hydrate email from localStorage if missing in Redux
+  useEffect(() => {
+    if (!email) {
+      const storedEmail = localStorage.getItem("signupEmail");
+      if (storedEmail) {
+        dispatch(setEmail(storedEmail));
+      }
+    }
+  }, [email, dispatch]);
+
+  // Check if email is available
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      // Small delay to allow hydration
+      if (!email) {
+        const storedEmail = localStorage.getItem("signupEmail");
+        if (!storedEmail) {
+          showToast.error("Email not found. Please start over.");
+          router.push("/login");
+        }
+      }
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [email, router]);
+
+  // Format seconds to mm:ss
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
 
   // Handle OTP input
   const handleOtpChange = (index: number, value: string) => {
@@ -138,8 +177,10 @@ export default function VerifyOTPPage() {
       showToast.auth.otpVerified();
       setIsVerified(true);
 
-      // Clear OTP state
-      dispatch(clearOTPState());
+      // Clear OTP state only if not resetting password (we need email for the next step)
+      if (purpose !== "reset-password") {
+        dispatch(clearOTPState());
+      }
 
       // Redirect based on purpose
       setTimeout(() => {
@@ -151,15 +192,7 @@ export default function VerifyOTPPage() {
       }, 2000);
     } catch (error) {
       setIsVerifying(false);
-      const errorMessage =
-        (error as Error & { data?: { message?: string } })?.data?.message ||
-        (error as Error)?.message ||
-        "Verification failed";
-      showToast.auth.otpError(errorMessage);
-      setErrors({
-        otp: "",
-        general: errorMessage,
-      });
+      handleError(error as Error);
     }
   };
 
@@ -180,7 +213,7 @@ export default function VerifyOTPPage() {
 
       setIsResending(false);
       showToast.auth.otpSent();
-      setTimeLeft(60);
+      dispatch(startResendCooldown());
       setOtp(["", "", "", "", "", ""]);
     } catch (error: unknown) {
       setIsResending(false);
@@ -198,19 +231,14 @@ export default function VerifyOTPPage() {
 
   // Timer countdown
   useEffect(() => {
-    if (timeLeft > 0) {
-      const timer = setTimeout(() => setTimeLeft(timeLeft - 1), 1000);
-      return () => clearTimeout(timer);
+    let timer: NodeJS.Timeout;
+    if (resendOTPTimer > 0) {
+      timer = setTimeout(() => {
+        dispatch(decrementResendCooldown());
+      }, 1000);
     }
-  }, [timeLeft]);
-
-  // Check if email is available
-  useEffect(() => {
-    if (!email) {
-      showToast.error("Email not found. Please start over.");
-      router.push("/login");
-    }
-  }, [email, router]);
+    return () => clearTimeout(timer);
+  }, [resendOTPTimer, dispatch]);
 
   const isOtpComplete = otp.every((digit) => digit !== "");
 
@@ -364,11 +392,10 @@ export default function VerifyOTPPage() {
                           }
                           onKeyDown={(e) => handleKeyDown(index, e)}
                           onPaste={index === 0 ? handlePaste : undefined}
-                          className={`w-10 h-12 lg:w-12 lg:h-14 text-center text-lg lg:text-xl font-bold bg-zinc-800/50 border-zinc-700/50 text-white placeholder:text-zinc-500 focus:border-primary focus:ring-2 focus:ring-primary/20 ${
-                            errors.otp
-                              ? "border-red-500 focus:border-red-500 focus:ring-red-500/20"
-                              : ""
-                          }`}
+                          className={`w-10 h-12 lg:w-12 lg:h-14 text-center text-lg lg:text-xl font-bold bg-zinc-800/50 border-zinc-700/50 text-white placeholder:text-zinc-500 focus:border-primary focus:ring-2 focus:ring-primary/20 ${errors.otp
+                            ? "border-red-500 focus:border-red-500 focus:ring-red-500/20"
+                            : ""
+                            }`}
                         />
                       ))}
                     </div>
@@ -411,7 +438,7 @@ export default function VerifyOTPPage() {
                     </p>
                     <Button
                       onClick={handleResend}
-                      disabled={timeLeft > 0 || isResending}
+                      disabled={resendOTPTimer > 0 || isResending}
                       variant="outline"
                       className="w-full bg-white/5 border-white/10 text-white hover:bg-white/10 hover:border-white/20 rounded-xl py-2 text-sm font-medium transform hover:scale-[1.02] transition-all duration-300 backdrop-blur-sm shadow-lg disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
                     >
@@ -420,8 +447,8 @@ export default function VerifyOTPPage() {
                           <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />
                           Sending...
                         </>
-                      ) : timeLeft > 0 ? (
-                        `Resend in ${timeLeft}s`
+                      ) : resendOTPTimer > 0 ? (
+                        `Resend in ${formatTime(resendOTPTimer)}`
                       ) : (
                         "Resend Code"
                       )}

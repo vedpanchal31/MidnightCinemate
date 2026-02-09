@@ -1,15 +1,10 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextResponse } from 'next/server';
 import {
   VerifyOTPRequest,
   OTPType,
   ErrorResponse
 } from '@/lib/database/schema';
-import { isOTPExpired } from '@/lib/utils/auth';
-
-// Mock database - replace with actual database
-const users: any[] = [];
-const otps: any[] = [];
+import { findValidOTP, markOTPAsUsed, findUserByEmail, updateUser } from '@/lib/database/db-service';
 
 export async function POST(request: Request) {
   try {
@@ -24,13 +19,7 @@ export async function POST(request: Request) {
     }
 
     // Find valid OTP
-    const validOTP = otps.find(otp =>
-      otp.email === body.email &&
-      otp.code === body.code &&
-      otp.type === body.type &&
-      !otp.is_used &&
-      !isOTPExpired(otp.expires_at)
-    );
+    const validOTP = await findValidOTP(body.email, body.code, body.type);
 
     if (!validOTP) {
       return NextResponse.json<ErrorResponse>({
@@ -48,15 +37,13 @@ export async function POST(request: Request) {
     }
 
     // Mark OTP as used
-    validOTP.is_used = true;
-    validOTP.attempts += 1;
+    await markOTPAsUsed(body.email, body.code, body.type);
 
     // If email verification, update user's email verification status
     if (body.type === OTPType.EMAIL_VERIFICATION) {
-      const user = users.find(u => u.email === body.email);
+      const user = await findUserByEmail(body.email);
       if (user) {
-        user.is_email_verified = true;
-        user.updated_at = new Date();
+        await updateUser(body.email, { is_email_verified: true });
       }
 
       return NextResponse.json({
@@ -72,11 +59,12 @@ export async function POST(request: Request) {
     // If password reset, generate reset token
     if (body.type === OTPType.PASSWORD_RESET) {
       const resetToken = `reset_token_${Date.now()}_${Math.random().toString(36)}`;
-      const user = users.find(u => u.email === body.email);
+      const user = await findUserByEmail(body.email);
       if (user) {
-        user.reset_token = resetToken;
-        user.reset_token_expires = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes
-        user.updated_at = new Date();
+        await updateUser(body.email, {
+          reset_token: resetToken,
+          reset_token_expires: new Date(Date.now() + 30 * 60 * 1000) // 30 minutes
+        });
       }
 
       return NextResponse.json({

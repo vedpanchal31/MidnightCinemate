@@ -4,7 +4,7 @@ import { persistStore, persistReducer } from 'redux-persist';
 import storage from 'redux-persist/lib/storage';
 
 // Import auth and movies API
-import authReducer from "./authSlice";
+import authReducer, { AuthState } from "./authSlice";
 import { authApi } from "./authApi";
 import { moviesApi } from "./moviesApi";
 
@@ -44,7 +44,7 @@ export const persistor = persistStore(store);
 
 // Infer types from store itself
 export type RootState = ReturnType<typeof store.getState> & {
-  auth: unknown; // Override auth type to handle persisted state
+  auth: AuthState; // Use proper AuthState type
 };
 export type AppDispatch = typeof store.dispatch;
 
