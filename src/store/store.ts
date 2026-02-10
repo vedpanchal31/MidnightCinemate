@@ -14,7 +14,7 @@ const authPersistConfig = {
   version: 1,
   storage,
   whitelist: [
-    "user", "userType", "preferences", "roleType",
+    "user", "token", "refreshToken", "userType", "preferences", "roleType",
     "email", "verifyUserEmail", "verifyUserMobile",
     "forgotPasswordUserMobile", "resendOTPTimer",
     "isGuestUser", "fcmToken", "redirectPath",

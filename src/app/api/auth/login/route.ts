@@ -7,7 +7,7 @@ import {
   ErrorResponse
 } from '@/lib/database/schema';
 import { sendOTPEmail } from '@/lib/email/smtp';
-import { generateOTP, validateEmail } from '@/lib/utils/auth';
+import { generateOTP, validateEmail, generateJWTToken, generateRefreshToken } from '@/lib/utils/auth';
 import { findUserByEmail, updateUser, createOTP } from '@/lib/database/db-service';
 
 export async function POST(request: Request) {
@@ -100,8 +100,13 @@ export async function POST(request: Request) {
     }
 
     // User is verified, generate tokens and login
-    const token = `mock_access_token_${Date.now()}`;
-    const refreshToken = `mock_refresh_token_${Date.now()}`;
+    const token = generateJWTToken({
+      userId: user.id,
+      email: user.email,
+      name: user.name
+    }, '1h');
+    
+    const refreshToken = generateRefreshToken(user.id);
 
     // Update last login
     await updateUser(body.email, { last_login: new Date() });

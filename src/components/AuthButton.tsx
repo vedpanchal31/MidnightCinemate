@@ -5,23 +5,18 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { User, LogOut } from 'lucide-react';
 import { RootState } from '@/store/store';
-import { logout, AuthState } from '@/store/authSlice';
+import { AuthState } from '@/store/authSlice';
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { showToast } from '@/lib/toast';
-import { useDispatch, useSelector } from 'react-redux';
+import { useSelector } from 'react-redux';
+import useLogout from '@/hooks/uselogout';
 
 export default function AuthButton() {
-  const dispatch = useDispatch();
+  const { logout } = useLogout();
   const { user, isAuthenticated } = useSelector((state: RootState) => state.auth as AuthState);
-
-  const handleLogout = () => {
-    dispatch(logout());
-    showToast.success("Logged out successfully");
-  };
 
   if (isAuthenticated && user) {
     return (
@@ -56,7 +51,7 @@ export default function AuthButton() {
               variant="destructive"
               size="sm"
               className="w-full flex items-center justify-center gap-2 mt-2 bg-red-950/30 text-red-400 hover:bg-red-950/50 border border-red-900/50 transition-colors"
-              onClick={handleLogout}
+              onClick={() => logout()}
             >
               <LogOut className="h-4 w-4" />
               Logout
