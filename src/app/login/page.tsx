@@ -17,6 +17,7 @@ import { FormikInput } from "@/components/FormikInput";
 import { useLoginMutation } from "@/store/authApi";
 import { useDispatch } from "react-redux";
 import { loginSuccess, setEmail } from "@/store/authSlice";
+import { handleError } from "@/helpers/HelperFunction";
 
 export default function LoginPage() {
   const [login] = useLoginMutation();
@@ -67,13 +68,7 @@ export default function LoginPage() {
         router.push("/verify-otp?purpose=email-verification");
       }
     } catch (error) {
-      console.error("Login error:", error);
-      const errorMessage =
-        (error instanceof Error &&
-          (error as { data?: { message?: string } }).data?.message) ||
-        (error instanceof Error && error.message) ||
-        "Login failed";
-      showToast.auth.loginError(errorMessage);
+      handleError(error as Error);
     } finally {
       setSubmitting(false);
     }
@@ -212,11 +207,10 @@ export default function LoginPage() {
                     label="Email Address"
                     placeholder="Enter your email"
                     icon={<Mail className="h-4 w-4 text-zinc-500" />}
-                    className={`${
-                      errors.email && touched.email
+                    className={`${errors.email && touched.email
                         ? "border-red-500 focus:border-red-500 focus:ring-red-500/20"
                         : ""
-                    }`}
+                      }`}
                   />
 
                   <FormikInput
@@ -226,11 +220,10 @@ export default function LoginPage() {
                     placeholder="Enter your password"
                     icon={<Lock className="h-4 w-4 text-zinc-500" />}
                     showPasswordToggle={true}
-                    className={`${
-                      errors.password && touched.password
+                    className={`${errors.password && touched.password
                         ? "border-red-500 focus:border-red-500 focus:ring-red-500/20"
                         : ""
-                    }`}
+                      }`}
                   />
 
                   <div className="flex items-center justify-between">

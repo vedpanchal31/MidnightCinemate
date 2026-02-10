@@ -1,5 +1,5 @@
-import { OTPType } from '@/lib/database/schema';
-import nodemailer from 'nodemailer';
+import { OTPType } from "@/data/constants";
+import nodemailer from "nodemailer";
 
 interface EmailConfig {
   host: string;
@@ -11,18 +11,18 @@ interface EmailConfig {
 }
 
 const emailConfig: EmailConfig = {
-  host: process.env.SMTP_HOST || 'smtp.gmail.com',
-  port: parseInt(process.env.SMTP_PORT || '587'),
-  secure: process.env.SMTP_SECURE === 'true',
-  user: process.env.SMTP_USER || '',
-  password: process.env.SMTP_PASS || '',
-  from: process.env.SMTP_FROM || 'Cinemate <noreply@cinemate.com>'
+  host: process.env.SMTP_HOST || "smtp.gmail.com",
+  port: parseInt(process.env.SMTP_PORT || "587"),
+  secure: process.env.SMTP_SECURE === "true",
+  user: process.env.SMTP_USER || "",
+  password: process.env.SMTP_PASS || "",
+  from: process.env.SMTP_FROM || "Cinemate <noreply@cinemate.com>",
 };
 
 // Create transporter
 const createTransporter = () => {
   if (!emailConfig.user || !emailConfig.password) {
-    console.warn('SMTP credentials not configured. Using mock email service.');
+    console.warn("SMTP credentials not configured. Using mock email service.");
     return null;
   }
 
@@ -41,12 +41,13 @@ export async function sendOTPEmail(
   email: string,
   otp: string,
   type: OTPType,
-  userName?: string
+  userName?: string,
 ): Promise<boolean> {
   try {
-    const subject = type === OTPType.EMAIL_VERIFICATION
-      ? 'Verify Your Cinemate Account'
-      : 'Reset Your Cinemate Password';
+    const subject =
+      type === OTPType.EMAIL_VERIFICATION
+        ? "Verify Your Cinemate Account"
+        : "Reset Your Cinemate Password";
 
     const htmlContent = generateEmailTemplate(otp, type, userName);
 
@@ -72,20 +73,22 @@ export async function sendOTPEmail(
     console.log(`Sending email to ${email} via SMTP...`);
     const info = await transporter.sendMail(mailOptions);
 
-    console.log('Email sent successfully:', {
+    console.log("Email sent successfully:", {
       messageId: info.messageId,
       response: info.response,
       to: email,
-      subject: subject
+      subject: subject,
     });
 
     return true;
   } catch (error) {
-    console.error('Failed to send email:', error);
+    console.error("Failed to send email:", error);
 
     // Fallback to mock email on error
     console.log(`[FALLBACK MOCK EMAIL] Sending email to ${email}:`);
-    console.log(`[FALLBACK MOCK EMAIL] Subject: ${type === OTPType.EMAIL_VERIFICATION ? 'Verify Your Cinemate Account' : 'Reset Your Cinemate Password'}`);
+    console.log(
+      `[FALLBACK MOCK EMAIL] Subject: ${type === OTPType.EMAIL_VERIFICATION ? "Verify Your Cinemate Account" : "Reset Your Cinemate Password"}`,
+    );
     console.log(`[FALLBACK MOCK EMAIL] OTP: ${otp}`);
     console.log(`[FALLBACK MOCK EMAIL] Type: ${type}`);
 
@@ -93,16 +96,22 @@ export async function sendOTPEmail(
   }
 }
 
-function generateEmailTemplate(otp: string, type: OTPType, userName?: string): string {
-  const greeting = userName ? `Hi ${userName},` : 'Hi,';
+function generateEmailTemplate(
+  otp: string,
+  type: OTPType,
+  userName?: string,
+): string {
+  const greeting = userName ? `Hi ${userName},` : "Hi,";
 
-  const mainContent = type === OTPType.EMAIL_VERIFICATION
-    ? `Thank you for signing up for Cinemate! Your verification code is:`
-    : `You requested to reset your password. Your reset code is:`;
+  const mainContent =
+    type === OTPType.EMAIL_VERIFICATION
+      ? `Thank you for signing up for Cinemate! Your verification code is:`
+      : `You requested to reset your password. Your reset code is:`;
 
-  const footer = type === OTPType.EMAIL_VERIFICATION
-    ? 'This code will expire in 10 minutes. If you didn\'t create an account, please ignore this email.'
-    : 'This code will expire in 10 minutes. If you didn\'t request a password reset, please ignore this email.';
+  const footer =
+    type === OTPType.EMAIL_VERIFICATION
+      ? "This code will expire in 10 minutes. If you didn't create an account, please ignore this email."
+      : "This code will expire in 10 minutes. If you didn't request a password reset, please ignore this email.";
 
   return `
     <!DOCTYPE html>
@@ -110,7 +119,7 @@ function generateEmailTemplate(otp: string, type: OTPType, userName?: string): s
     <head>
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>${type === OTPType.EMAIL_VERIFICATION ? 'Email Verification' : 'Password Reset'}</title>
+      <title>${type === OTPType.EMAIL_VERIFICATION ? "Email Verification" : "Password Reset"}</title>
       <style>
         body {
           font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;

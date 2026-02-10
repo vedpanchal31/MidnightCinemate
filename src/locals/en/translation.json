@@ -15,6 +15,7 @@
     "COMMON.PASS.REQUIRES.NUMBER": "Password requires a number",
     "COMMON.PASS.REQUIRES.LOWER.CASE": "Password requires a lowercase letter",
     "COMMON.PASS.REQUIRES.UPPER.CASE": "Password requires an uppercase letter",
-    "COMMON.PASS.REQUIRES.SYMBOL": "Password requires a symbol"
+    "COMMON.PASS.REQUIRES.SYMBOL": "Password requires a symbol",
+    "COMMON.LOGOUT.SUCCESSFUL": "You have logged out successfully"
 }
 

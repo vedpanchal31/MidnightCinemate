@@ -29,9 +29,16 @@ import {
 import { useTranslation } from "react-i18next";
 import { FormikInput } from "@/components/FormikInput";
 
+import { useSignUpMutation } from "@/store/authApi";
+import { useDispatch } from "react-redux";
+import { setEmail } from "@/store/authSlice";
+import { handleError } from "@/helpers/HelperFunction";
+
 export default function SignUpPage() {
   const router = useRouter();
   const { t } = useTranslation();
+  const [signUp] = useSignUpMutation();
+  const dispatch = useDispatch();
 
   // Validation schema with Yup
   const signupSchema = Yup.object().shape({
@@ -58,29 +65,36 @@ export default function SignUpPage() {
     values: typeof initialValues,
     { setSubmitting }: { setSubmitting: (isSubmitting: boolean) => void },
   ) => {
-    // Show loading toast
-    const loadingToast = showToast.loading("Creating account...");
+    try {
+      if (!values.terms) {
+        showToast.error("Please accept the terms and conditions");
+        setSubmitting(false);
+        return;
+      }
 
-    // Simulate API call for signup
-    setTimeout(() => {
-      setSubmitting(false);
-      showToast.dismiss(loadingToast);
+      const result = await signUp({
+        name: values.name,
+        email: values.email,
+        password: values.password,
+      }).unwrap();
 
-      // Simulate 80% success rate
-      if (Math.random() > 0.2) {
+      if (result.success) {
         showToast.auth.signupSuccess();
 
         // Store email for OTP verification
+        dispatch(setEmail(values.email));
         localStorage.setItem("signupEmail", values.email);
 
         // Redirect to OTP verification
         setTimeout(() => {
           router.push("/verify-otp?purpose=signup");
         }, 1500);
-      } else {
-        showToast.auth.signupError("Email already exists or invalid data");
       }
-    }, 2000);
+    } catch (error) {
+      handleError(error as Error);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -229,11 +243,10 @@ export default function SignUpPage() {
                     label="Full Name"
                     placeholder="Enter your full name"
                     icon={<User className="h-4 w-4 text-zinc-500" />}
-                    className={`${
-                      errors.name && touched.name
-                        ? "border-red-500 focus:border-red-500 focus:ring-red-500/20"
-                        : ""
-                    }`}
+                    className={`${errors.name && touched.name
+                      ? "border-red-500 focus:border-red-500 focus:ring-red-500/20"
+                      : ""
+                      }`}
                   />
 
                   <FormikInput
@@ -242,11 +255,10 @@ export default function SignUpPage() {
                     label="Email Address"
                     placeholder="Enter your email"
                     icon={<Mail className="h-4 w-4 text-zinc-500" />}
-                    className={`${
-                      errors.email && touched.email
-                        ? "border-red-500 focus:border-red-500 focus:ring-red-500/20"
-                        : ""
-                    }`}
+                    className={`${errors.email && touched.email
+                      ? "border-red-500 focus:border-red-500 focus:ring-red-500/20"
+                      : ""
+                      }`}
                   />
 
                   <FormikInput
@@ -256,11 +268,10 @@ export default function SignUpPage() {
                     placeholder="Create a strong password"
                     icon={<Lock className="h-4 w-4 text-zinc-500" />}
                     showPasswordToggle={true}
-                    className={`${
-                      errors.password && touched.password
-                        ? "border-red-500 focus:border-red-500 focus:ring-red-500/20"
-                        : ""
-                    }`}
+                    className={`${errors.password && touched.password
+                      ? "border-red-500 focus:border-red-500 focus:ring-red-500/20"
+                      : ""
+                      }`}
                   />
 
                   <FormikInput
@@ -270,15 +281,24 @@ export default function SignUpPage() {
                     placeholder="Confirm your password"
                     icon={<Lock className="h-4 w-4 text-zinc-500" />}
                     showPasswordToggle={true}
-                    className={`${
-                      errors.confirmPassword && touched.confirmPassword
-                        ? "border-red-500 focus:border-red-500 focus:ring-red-500/20"
-                        : ""
-                    }`}
+                    className={`${errors.confirmPassword && touched.confirmPassword
+                      ? "border-red-500 focus:border-red-500 focus:ring-red-500/20"
+                      : ""
+                      }`}
                   />
 
                   <div className="flex items-start space-x-2">
-                    <Field as={Checkbox} id="terms" name="terms" size="md" />
+                    <Field name="terms">
+                      {({ field, form }: { field: { value: boolean }, form: { setFieldValue: (field: string, value: boolean) => void } }) => (
+                        <Checkbox
+                          id="terms"
+                          checked={field.value}
+                          onCheckedChange={(checked) => {
+                            form.setFieldValue("terms", checked === true);
+                          }}
+                        />
+                      )}
+                    </Field>
                     <ErrorMessage name="terms">
                       {(msg) => <p className="text-xs text-red-400">{msg}</p>}
                     </ErrorMessage>

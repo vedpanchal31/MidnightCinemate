@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 // Authentication utility functions
 
 export function generateOTP(): string {
@@ -23,20 +22,42 @@ export function isOTPExpired(expiresAt: Date): boolean {
   return new Date() > expiresAt;
 }
 
-export function generateJWTToken(payload: any, secret: string, expiresIn: string): string {
-  // This would use jsonwebtoken in a real implementation
-  // For now, return a mock token
-  return `mock_jwt_${Date.now()}_${Math.random().toString(36)}`;
+import jwt from 'jsonwebtoken';
+
+export interface JWTPayload {
+  userId: string;
+  email: string;
+  name: string;
+  iat?: number;
+  exp?: number;
 }
 
-export function verifyJWTToken(token: string, secret: string): any {
-  // This would use jsonwebtoken in a real implementation
-  // For now, return mock payload
-  if (token.startsWith('mock_jwt_')) {
-    return {
-      userId: 'mock_user_id',
-      email: 'mock@example.com'
-    };
+export function generateJWTToken(payload: Omit<JWTPayload, 'iat' | 'exp'>, expiresIn: string = '1h'): string {
+  const secret = process.env.JWT_SECRET || 'fallback-secret-for-development';
+  return jwt.sign(payload, secret, { expiresIn } as jwt.SignOptions);
+}
+
+export function verifyJWTToken(token: string): JWTPayload | null {
+  try {
+    const secret = process.env.JWT_SECRET || 'fallback-secret-for-development';
+    return jwt.verify(token, secret) as JWTPayload;
+  } catch (error) {
+    console.error('JWT verification failed:', error);
+    return null;
   }
-  return null;
+}
+
+export function generateRefreshToken(userId: string): string {
+  const secret = process.env.JWT_REFRESH_SECRET || 'fallback-refresh-secret-for-development';
+  return jwt.sign({ userId }, secret, { expiresIn: '7d' });
+}
+
+export function verifyRefreshToken(token: string): { userId: string } | null {
+  try {
+    const secret = process.env.JWT_REFRESH_SECRET || 'fallback-refresh-secret-for-development';
+    return jwt.verify(token, secret) as { userId: string };
+  } catch (error) {
+    console.error('Refresh token verification failed:', error);
+    return null;
+  }
 }
