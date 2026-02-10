@@ -9,9 +9,6 @@ export const YupRequiredString = Yup.string().required(() =>
   i18n.t("COMMON.REQUIRED.FIELD"),
 );
 
-
-
-
 export const YupRequiredNumber = Yup.number()
   .typeError(() => i18n.t("COMMON.RESPONSETIMEERROR"))
   .required(() => i18n.t("COMMON.REQUIRED.FIELD"))
@@ -56,7 +53,6 @@ export const YupWithoutDecimalUptoTwoDecimalRequiredNumber = Yup.number()
     },
   );
 
-
 export const YupRequiredNumberWithDecimal = Yup.number()
   .typeError(() => i18n.t("COMMON.RESPONSETIMEERROR"))
   .required(() => i18n.t("COMMON.REQUIRED.FIELD"))
@@ -75,7 +71,6 @@ export const YupRequiredNumberWithDecimal = Yup.number()
       return decimalCount <= 4; // Check if the number has more than 4 decimals
     },
   );
-
 
 export const YupRequiredNumberWithoutZero = Yup.number()
   .typeError(() => i18n.t("COMMON.RESPONSETIMEERROR"))
@@ -123,11 +118,9 @@ export const YupRequiredPercentageNumberInRange = Yup.number()
     (value) => Number.isInteger(value),
   );
 
-
 export const YupRequiredImage = Yup.mixed().required(() =>
   i18n.t("COMMON.REQUIRED.FIELD"),
 );
-
 
 export const YupStringNoLeadingTrailingSpaces = YupRequiredString.matches(
   /^(?!\s)/,
