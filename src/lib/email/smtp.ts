@@ -102,99 +102,57 @@ function generateEmailTemplate(
   userName?: string,
 ): string {
   const greeting = userName ? `Hi ${userName},` : "Hi,";
-
   const mainContent =
     type === OTPType.EMAIL_VERIFICATION
       ? `Thank you for signing up for Cinemate! Your verification code is:`
       : `You requested to reset your password. Your reset code is:`;
-
   const footer =
     type === OTPType.EMAIL_VERIFICATION
       ? "This code will expire in 10 minutes. If you didn't create an account, please ignore this email."
       : "This code will expire in 10 minutes. If you didn't request a password reset, please ignore this email.";
 
+  // Split OTP into boxes
+  const otpBoxes = otp
+    .split("")
+    .map(
+      (digit) =>
+        `<td style="background:#fff0f0;border:1px solid #E50914;border-radius:8px;width:40px;height:48px;font-size:24px;font-weight:bold;color:#E50914;text-align:center;">${digit}</td>`,
+    )
+    .join("");
+
   return `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <meta charset="utf-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>${type === OTPType.EMAIL_VERIFICATION ? "Email Verification" : "Password Reset"}</title>
-      <style>
-        body {
-          font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-          line-height: 1.6;
-          color: #333;
-          max-width: 600px;
-          margin: 0 auto;
-          padding: 20px;
-          background-color: #f4f4f4;
-        }
-        .container {
-          background-color: #ffffff;
-          border-radius: 8px;
-          padding: 40px;
-          box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        }
-        .header {
-          text-align: center;
-          margin-bottom: 30px;
-        }
-        .logo {
-          font-size: 24px;
-          font-weight: bold;
-          color: #e50914; /* Netflix red */
-        }
-        .otp-code {
-          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-          color: white;
-          font-size: 32px;
-          font-weight: bold;
-          padding: 20px;
-          border-radius: 8px;
-          text-align: center;
-          letter-spacing: 4px;
-          margin: 30px 0;
-        }
-        .footer {
-          text-align: center;
-          font-size: 14px;
-          color: #666;
-          margin-top: 30px;
-        }
-        .button {
-          display: inline-block;
-          background: #e50914;
-          color: white;
-          padding: 12px 24px;
-          text-decoration: none;
-          border-radius: 4px;
-          margin-top: 20px;
-        }
-      </style>
-    </head>
-    <body>
-      <div class="container">
-        <div class="header">
-          <div class="logo">🎬 Cinemate</div>
-        </div>
-        
-        ${greeting}
-        
-        <p>${mainContent}</p>
-        
-        <div class="otp-code">${otp}</div>
-        
-        <p style="text-align: center;">
-          <a href="#" class="button">Verify Now</a>
-        </p>
-        
-        <div class="footer">
-          <p>${footer}</p>
-          <p>Best regards,<br>The Cinemate Team</p>
-        </div>
+  <!DOCTYPE html>
+  <html>
+  <head>
+    <meta charset="utf-8">
+    <title>${type === OTPType.EMAIL_VERIFICATION ? "Email Verification" : "Password Reset"}</title>
+  </head>
+  <body style="background:#f8f8ff;font-family:'Segoe UI',Arial,sans-serif;margin:0;padding:0;">
+    <div style="border-top:6px solid #E50914;margin-bottom:32px;"></div>
+    <div style="text-align:center;margin:32px auto 0;">
+      <span style="font-size:28px;color:#E50914;font-weight:bold;">🎬 Cinemate</span>
+    </div>
+    <div style="background:#fff;border:1px solid #E50914;border-radius:16px;max-width:420px;margin:32px auto;padding:32px 24px;box-shadow:0 2px 8px rgba(229,9,20,0.08);text-align:center;">
+      <div style="font-size:32px;color:#E50914;margin-bottom:8px;">✉️</div>
+      <div style="color:#E50914;font-weight:600;font-size:18px;margin-bottom:12px;">${greeting}</div>
+      <div style="color:#333;font-size:15px;margin-bottom:24px;">
+        ${mainContent}<br>
+        <span style="color:#888;font-size:13px;">Code is valid for the next 10 minutes.</span>
       </div>
-    </body>
-    </html>
-  `;
+      <div style="font-size:17px;font-weight:600;margin-bottom:12px;">Confirmation Code</div>
+      <div style="display:inline-block;user-select:all;-webkit-user-select:all;-moz-user-select:all;-ms-user-select:all;">
+        <table style="margin:0 auto;margin-bottom:24px;border-spacing:8px;">
+          <tr>
+            ${otpBoxes}
+          </tr>
+        </table>
+      </div>
+      <div style="color:#E50914;font-size:14px;margin-top:16px;">
+        Thank You<br>
+        <span style="color:#E50914;text-decoration:none;font-weight:500;">Cinemate Team</span>
+      </div>
+    </div>
+  </body>
+  </html>
+`;
 }
