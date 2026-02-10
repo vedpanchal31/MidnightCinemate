@@ -24,11 +24,11 @@ import {
   clearOTPState,
   setEmail,
   startResendCooldown,
-  decrementResendCooldown
+  decrementResendCooldown,
 } from "@/store/authSlice";
 import { RootState } from "@/store/store";
-import { OTPType } from "@/lib/database/schema";
 import { handleError } from "@/helpers/HelperFunction";
+import { OTPType } from "@/data/constants";
 
 export default function VerifyOTPPage() {
   const router = useRouter();
@@ -39,7 +39,9 @@ export default function VerifyOTPPage() {
   const dispatch = useDispatch();
 
   const email = useSelector((state: RootState) => (state.auth as any).email);
-  const resendOTPTimer = useSelector((state: RootState) => (state.auth as any).resendOTPTimer);
+  const resendOTPTimer = useSelector(
+    (state: RootState) => (state.auth as any).resendOTPTimer,
+  );
 
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
   const [isVerifying, setIsVerifying] = useState(false);
@@ -79,7 +81,7 @@ export default function VerifyOTPPage() {
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
+    return `${mins}:${secs.toString().padStart(2, "0")}`;
   };
 
   // Handle OTP input
@@ -392,10 +394,11 @@ export default function VerifyOTPPage() {
                           }
                           onKeyDown={(e) => handleKeyDown(index, e)}
                           onPaste={index === 0 ? handlePaste : undefined}
-                          className={`w-10 h-12 lg:w-12 lg:h-14 text-center text-lg lg:text-xl font-bold bg-zinc-800/50 border-zinc-700/50 text-white placeholder:text-zinc-500 focus:border-primary focus:ring-2 focus:ring-primary/20 ${errors.otp
-                            ? "border-red-500 focus:border-red-500 focus:ring-red-500/20"
-                            : ""
-                            }`}
+                          className={`w-10 h-12 lg:w-12 lg:h-14 text-center text-lg lg:text-xl font-bold bg-zinc-800/50 border-zinc-700/50 text-white placeholder:text-zinc-500 focus:border-primary focus:ring-2 focus:ring-primary/20 ${
+                            errors.otp
+                              ? "border-red-500 focus:border-red-500 focus:ring-red-500/20"
+                              : ""
+                          }`}
                         />
                       ))}
                     </div>

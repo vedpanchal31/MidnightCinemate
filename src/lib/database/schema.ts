@@ -1,5 +1,7 @@
 // Database Schema for Authentication System
 
+import { OTPType } from "@/data/constants";
+
 export interface User {
   id: string;
   email: string;
@@ -38,17 +40,12 @@ export interface OTP {
   created_at: Date;
 }
 
-export enum OTPType {
-  EMAIL_VERIFICATION = 1,
-  PASSWORD_RESET = 2
-}
-
 // API Response Types
 export interface AuthResponse {
   success: boolean;
   message: string;
   data?: {
-    user: Omit<User, 'password'>;
+    user: Omit<User, "password">;
     token: string;
     refresh_token: string;
   };
@@ -58,7 +55,7 @@ export interface LoginResponse {
   success: boolean;
   message: string;
   data?: {
-    user: Omit<User, 'password'>;
+    user: Omit<User, "password">;
     token: string;
     refresh_token: string;
     is_email_verified: boolean;

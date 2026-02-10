@@ -1,10 +1,12 @@
-import { NextResponse } from 'next/server';
+import { NextResponse } from "next/server";
+import { VerifyOTPRequest, ErrorResponse } from "@/lib/database/schema";
 import {
-  VerifyOTPRequest,
-  OTPType,
-  ErrorResponse
-} from '@/lib/database/schema';
-import { findValidOTP, markOTPAsUsed, findUserByEmail, updateUser } from '@/lib/database/db-service';
+  findValidOTP,
+  markOTPAsUsed,
+  findUserByEmail,
+  updateUser,
+} from "@/lib/database/db-service";
+import { OTPType } from "@/data/constants";
 
 export async function POST(request: Request) {
   try {
@@ -12,28 +14,37 @@ export async function POST(request: Request) {
 
     // Validate input
     if (!body.email || !body.code || !body.type) {
-      return NextResponse.json<ErrorResponse>({
-        success: false,
-        message: 'Email, code, and type are required'
-      }, { status: 400 });
+      return NextResponse.json<ErrorResponse>(
+        {
+          success: false,
+          message: "Email, code, and type are required",
+        },
+        { status: 400 },
+      );
     }
 
     // Find valid OTP
     const validOTP = await findValidOTP(body.email, body.code, body.type);
 
     if (!validOTP) {
-      return NextResponse.json<ErrorResponse>({
-        success: false,
-        message: 'Invalid or expired verification code'
-      }, { status: 400 });
+      return NextResponse.json<ErrorResponse>(
+        {
+          success: false,
+          message: "Invalid or expired verification code",
+        },
+        { status: 400 },
+      );
     }
 
     // Check attempts
     if (validOTP.attempts >= 3) {
-      return NextResponse.json<ErrorResponse>({
-        success: false,
-        message: 'Too many attempts. Please request a new code.'
-      }, { status: 400 });
+      return NextResponse.json<ErrorResponse>(
+        {
+          success: false,
+          message: "Too many attempts. Please request a new code.",
+        },
+        { status: 400 },
+      );
     }
 
     // Mark OTP as used
@@ -48,11 +59,11 @@ export async function POST(request: Request) {
 
       return NextResponse.json({
         success: true,
-        message: 'Email verified successfully. You can now log in.',
+        message: "Email verified successfully. You can now log in.",
         data: {
           email: body.email,
-          is_verified: true
-        }
+          is_verified: true,
+        },
       });
     }
 
@@ -63,31 +74,36 @@ export async function POST(request: Request) {
       if (user) {
         await updateUser(body.email, {
           reset_token: resetToken,
-          reset_token_expires: new Date(Date.now() + 30 * 60 * 1000) // 30 minutes
+          reset_token_expires: new Date(Date.now() + 30 * 60 * 1000), // 30 minutes
         });
       }
 
       return NextResponse.json({
         success: true,
-        message: 'OTP verified successfully. You can now reset your password.',
+        message: "OTP verified successfully. You can now reset your password.",
         data: {
           email: body.email,
-          reset_token: resetToken
-        }
+          reset_token: resetToken,
+        },
       });
     }
 
-    return NextResponse.json<ErrorResponse>({
-      success: false,
-      message: 'Invalid OTP type'
-    }, { status: 400 });
-
+    return NextResponse.json<ErrorResponse>(
+      {
+        success: false,
+        message: "Invalid OTP type",
+      },
+      { status: 400 },
+    );
   } catch (error) {
-    console.error('OTP verification error:', error);
-    return NextResponse.json<ErrorResponse>({
-      success: false,
-      message: 'Internal server error',
-      error: error instanceof Error ? error.message : 'Unknown error'
-    }, { status: 500 });
+    console.error("OTP verification error:", error);
+    return NextResponse.json<ErrorResponse>(
+      {
+        success: false,
+        message: "Internal server error",
+        error: error instanceof Error ? error.message : "Unknown error",
+      },
+      { status: 500 },
+    );
   }
 }
