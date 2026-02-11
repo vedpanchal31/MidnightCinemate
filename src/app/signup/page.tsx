@@ -33,6 +33,7 @@ import { useSignUpMutation } from "@/store/authApi";
 import { useDispatch } from "react-redux";
 import { setEmail } from "@/store/authSlice";
 import { handleError } from "@/helpers/HelperFunction";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 export default function SignUpPage() {
   const router = useRouter();
@@ -210,15 +211,15 @@ export default function SignUpPage() {
 
         <div className="w-full max-w-sm lg:max-w-md relative z-10">
           {/* Mobile logo */}
-          <Link
-            href="/"
-            className="lg:hidden flex items-center justify-center gap-3 mb-6 group"
-          >
-            <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center shadow-lg shadow-red-900/50 group-hover:scale-105 transition-transform">
-              <Film className="w-5 h-5 text-white" />
-            </div>
-            <span className="text-xl font-bold text-white">Cinemate</span>
-          </Link>
+          <div className="lg:hidden flex items-center justify-between gap-3 mb-6 group">
+            <Link href="/" className="flex items-center justify-center gap-3">
+              <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center shadow-lg shadow-red-900/50 group-hover:scale-105 transition-transform">
+                <Film className="w-5 h-5 text-white" />
+              </div>
+              <span className="text-xl font-bold text-white">Cinemate</span>
+            </Link>
+            <ThemeToggle />
+          </div>
 
           <div className="bg-zinc-900/60 border border-zinc-800/50 backdrop-blur-2xl shadow-2xl rounded-2xl p-6 lg:p-8">
             <div className="text-center space-y-3 mb-6 lg:mb-8">
@@ -243,10 +244,11 @@ export default function SignUpPage() {
                     label="Full Name"
                     placeholder="Enter your full name"
                     icon={<User className="h-4 w-4 text-zinc-500" />}
-                    className={`${errors.name && touched.name
-                      ? "border-red-500 focus:border-red-500 focus:ring-red-500/20"
-                      : ""
-                      }`}
+                    className={`${
+                      errors.name && touched.name
+                        ? "border-red-500 focus:border-red-500 focus:ring-red-500/20"
+                        : ""
+                    }`}
                   />
 
                   <FormikInput
@@ -255,10 +257,11 @@ export default function SignUpPage() {
                     label="Email Address"
                     placeholder="Enter your email"
                     icon={<Mail className="h-4 w-4 text-zinc-500" />}
-                    className={`${errors.email && touched.email
-                      ? "border-red-500 focus:border-red-500 focus:ring-red-500/20"
-                      : ""
-                      }`}
+                    className={`${
+                      errors.email && touched.email
+                        ? "border-red-500 focus:border-red-500 focus:ring-red-500/20"
+                        : ""
+                    }`}
                   />
 
                   <FormikInput
@@ -268,10 +271,11 @@ export default function SignUpPage() {
                     placeholder="Create a strong password"
                     icon={<Lock className="h-4 w-4 text-zinc-500" />}
                     showPasswordToggle={true}
-                    className={`${errors.password && touched.password
-                      ? "border-red-500 focus:border-red-500 focus:ring-red-500/20"
-                      : ""
-                      }`}
+                    className={`${
+                      errors.password && touched.password
+                        ? "border-red-500 focus:border-red-500 focus:ring-red-500/20"
+                        : ""
+                    }`}
                   />
 
                   <FormikInput
@@ -281,15 +285,27 @@ export default function SignUpPage() {
                     placeholder="Confirm your password"
                     icon={<Lock className="h-4 w-4 text-zinc-500" />}
                     showPasswordToggle={true}
-                    className={`${errors.confirmPassword && touched.confirmPassword
-                      ? "border-red-500 focus:border-red-500 focus:ring-red-500/20"
-                      : ""
-                      }`}
+                    className={`${
+                      errors.confirmPassword && touched.confirmPassword
+                        ? "border-red-500 focus:border-red-500 focus:ring-red-500/20"
+                        : ""
+                    }`}
                   />
 
                   <div className="flex items-start space-x-2">
                     <Field name="terms">
-                      {({ field, form }: { field: { value: boolean }, form: { setFieldValue: (field: string, value: boolean) => void } }) => (
+                      {({
+                        field,
+                        form,
+                      }: {
+                        field: { value: boolean };
+                        form: {
+                          setFieldValue: (
+                            field: string,
+                            value: boolean,
+                          ) => void;
+                        };
+                      }) => (
                         <Checkbox
                           id="terms"
                           checked={field.value}
