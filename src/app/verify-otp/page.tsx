@@ -22,7 +22,6 @@ import { useVerifyOTPMutation, useResendOTPMutation } from "@/store/authApi";
 import { useDispatch, useSelector } from "react-redux";
 import {
   clearOTPState,
-  setEmail,
   startResendCooldown,
   decrementResendCooldown,
 } from "@/store/authSlice";
@@ -38,7 +37,11 @@ export default function VerifyOTPPage() {
   const [resendOTP] = useResendOTPMutation();
   const dispatch = useDispatch();
 
-  const email = useSelector((state: RootState) => (state.auth as any).email);
+  const emailFromUrl = searchParams.get("email");
+  const emailFromRedux = useSelector(
+    (state: RootState) => (state.auth as any).email,
+  );
+  const email = emailFromUrl || emailFromRedux;
   const resendOTPTimer = useSelector(
     (state: RootState) => (state.auth as any).resendOTPTimer,
   );
@@ -51,31 +54,6 @@ export default function VerifyOTPPage() {
     otp: "",
     general: "",
   });
-
-  // Hydrate email from localStorage if missing in Redux
-  useEffect(() => {
-    if (!email) {
-      const storedEmail = localStorage.getItem("signupEmail");
-      if (storedEmail) {
-        dispatch(setEmail(storedEmail));
-      }
-    }
-  }, [email, dispatch]);
-
-  // Check if email is available
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      // Small delay to allow hydration
-      if (!email) {
-        const storedEmail = localStorage.getItem("signupEmail");
-        if (!storedEmail) {
-          showToast.error("Email not found. Please start over.");
-          router.push("/login");
-        }
-      }
-    }, 1000);
-    return () => clearTimeout(timer);
-  }, [email, router]);
 
   // Format seconds to mm:ss
   const formatTime = (seconds: number) => {

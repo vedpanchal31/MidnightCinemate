@@ -30,15 +30,12 @@ import { useTranslation } from "react-i18next";
 import { FormikInput } from "@/components/FormikInput";
 
 import { useSignUpMutation } from "@/store/authApi";
-import { useDispatch } from "react-redux";
-import { setEmail } from "@/store/authSlice";
 import { handleError } from "@/helpers/HelperFunction";
 
 export default function SignUpPage() {
   const router = useRouter();
   const { t } = useTranslation();
   const [signUp] = useSignUpMutation();
-  const dispatch = useDispatch();
 
   // Validation schema with Yup
   const signupSchema = Yup.object().shape({
@@ -81,13 +78,11 @@ export default function SignUpPage() {
       if (result.success) {
         showToast.auth.signupSuccess();
 
-        // Store email for OTP verification
-        dispatch(setEmail(values.email));
-        localStorage.setItem("signupEmail", values.email);
-
-        // Redirect to OTP verification
+        // Redirect to OTP verification with email parameter
         setTimeout(() => {
-          router.push("/verify-otp?purpose=signup");
+          router.push(
+            `/verify-otp?purpose=signup&email=${encodeURIComponent(values.email)}`,
+          );
         }, 1500);
       }
     } catch (error) {
@@ -243,10 +238,11 @@ export default function SignUpPage() {
                     label="Full Name"
                     placeholder="Enter your full name"
                     icon={<User className="h-4 w-4 text-zinc-500" />}
-                    className={`${errors.name && touched.name
-                      ? "border-red-500 focus:border-red-500 focus:ring-red-500/20"
-                      : ""
-                      }`}
+                    className={`${
+                      errors.name && touched.name
+                        ? "border-red-500 focus:border-red-500 focus:ring-red-500/20"
+                        : ""
+                    }`}
                   />
 
                   <FormikInput
@@ -255,10 +251,11 @@ export default function SignUpPage() {
                     label="Email Address"
                     placeholder="Enter your email"
                     icon={<Mail className="h-4 w-4 text-zinc-500" />}
-                    className={`${errors.email && touched.email
-                      ? "border-red-500 focus:border-red-500 focus:ring-red-500/20"
-                      : ""
-                      }`}
+                    className={`${
+                      errors.email && touched.email
+                        ? "border-red-500 focus:border-red-500 focus:ring-red-500/20"
+                        : ""
+                    }`}
                   />
 
                   <FormikInput
@@ -268,10 +265,11 @@ export default function SignUpPage() {
                     placeholder="Create a strong password"
                     icon={<Lock className="h-4 w-4 text-zinc-500" />}
                     showPasswordToggle={true}
-                    className={`${errors.password && touched.password
-                      ? "border-red-500 focus:border-red-500 focus:ring-red-500/20"
-                      : ""
-                      }`}
+                    className={`${
+                      errors.password && touched.password
+                        ? "border-red-500 focus:border-red-500 focus:ring-red-500/20"
+                        : ""
+                    }`}
                   />
 
                   <FormikInput
@@ -281,15 +279,27 @@ export default function SignUpPage() {
                     placeholder="Confirm your password"
                     icon={<Lock className="h-4 w-4 text-zinc-500" />}
                     showPasswordToggle={true}
-                    className={`${errors.confirmPassword && touched.confirmPassword
-                      ? "border-red-500 focus:border-red-500 focus:ring-red-500/20"
-                      : ""
-                      }`}
+                    className={`${
+                      errors.confirmPassword && touched.confirmPassword
+                        ? "border-red-500 focus:border-red-500 focus:ring-red-500/20"
+                        : ""
+                    }`}
                   />
 
                   <div className="flex items-start space-x-2">
                     <Field name="terms">
-                      {({ field, form }: { field: { value: boolean }, form: { setFieldValue: (field: string, value: boolean) => void } }) => (
+                      {({
+                        field,
+                        form,
+                      }: {
+                        field: { value: boolean };
+                        form: {
+                          setFieldValue: (
+                            field: string,
+                            value: boolean,
+                          ) => void;
+                        };
+                      }) => (
                         <Checkbox
                           id="terms"
                           checked={field.value}
