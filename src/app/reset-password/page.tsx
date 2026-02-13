@@ -29,6 +29,7 @@ import { useResetPasswordMutation } from "@/store/authApi";
 import { useSelector, useDispatch } from "react-redux";
 import { RootState } from "@/store/store";
 import { clearOTPState } from "@/store/authSlice";
+import { handleError } from "@/helpers/HelperFunction";
 
 export default function ResetPasswordPage() {
   const router = useRouter();
@@ -55,10 +56,13 @@ export default function ResetPasswordPage() {
 
   // Check if email is available
   useEffect(() => {
-    if (!email) {
-      showToast.error("Reset session expired. Please try again.");
-      router.push("/forgot-password");
-    }
+    const timer = setTimeout(() => {
+      if (!email) {
+        showToast.error("Reset session expired. Please try again.");
+        router.push("/forgot-password");
+      }
+    }, 1000);
+    return () => clearTimeout(timer);
   }, [email, router]);
 
   // Handle form submission
@@ -67,9 +71,9 @@ export default function ResetPasswordPage() {
     { setSubmitting }: { setSubmitting: (isSubmitting: boolean) => void },
   ) => {
     try {
-      // For now, we'll use a mock reset token since the backend doesn't return one
-      // In a real implementation, this would come from the OTP verification response
-      const resetToken = "mock_reset_token";
+      // Use email as the reset token
+      // In a real implementation with unique tokens, this would come from the OTP verification response
+      const resetToken = email;
 
       const result = await resetPassword({
         reset_token: resetToken,
@@ -86,13 +90,8 @@ export default function ResetPasswordPage() {
       setTimeout(() => {
         router.push("/login");
       }, 2000);
-    } catch (error: unknown) {
-      console.error("Reset password error:", error);
-      const errorMessage =
-        (error as Error & { data?: { message?: string } })?.data?.message ||
-        (error as Error)?.message ||
-        "Failed to reset password";
-      showToast.auth.passwordResetError(errorMessage);
+    } catch (error) {
+      handleError(error as Error)
     } finally {
       setSubmitting(false);
     }
@@ -233,11 +232,10 @@ export default function ResetPasswordPage() {
                         placeholder="Enter your new password"
                         icon={<Lock className="h-4 w-4 text-zinc-500" />}
                         showPasswordToggle={true}
-                        className={`${
-                          errors.newPassword && touched.newPassword
-                            ? "border-red-500 focus:border-red-500 focus:ring-red-500/20"
-                            : ""
-                        }`}
+                        className={`${errors.newPassword && touched.newPassword
+                          ? "border-red-500 focus:border-red-500 focus:ring-red-500/20"
+                          : ""
+                          }`}
                       />
 
                       <FormikInput
@@ -247,11 +245,10 @@ export default function ResetPasswordPage() {
                         placeholder="Confirm your new password"
                         icon={<Lock className="h-4 w-4 text-zinc-500" />}
                         showPasswordToggle={true}
-                        className={`${
-                          errors.confirmPassword && touched.confirmPassword
-                            ? "border-red-500 focus:border-red-500 focus:ring-red-500/20"
-                            : ""
-                        }`}
+                        className={`${errors.confirmPassword && touched.confirmPassword
+                          ? "border-red-500 focus:border-red-500 focus:ring-red-500/20"
+                          : ""
+                          }`}
                       />
 
                       <Button

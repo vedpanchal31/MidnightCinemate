@@ -11,6 +11,45 @@ export type Movie = {
   genres: string[];
 };
 
+export type CastMember = {
+  id: number;
+  name: string;
+  character: string;
+  profile_url: string | null;
+  order: number;
+};
+
+export type CrewMember = {
+  id: number;
+  name: string;
+  profile_url?: string | null;
+};
+
+export type MovieVideo = {
+  id: string;
+  name: string;
+  type: string;
+  key: string;
+  site: string;
+  official: boolean;
+  url: string | null;
+};
+
+export type MovieExtended = Movie & {
+  backdrop_url: string | null;
+  runtime: number;
+  tagline: string;
+  status: string;
+  budget: number;
+  revenue: number;
+  cast: CastMember[];
+  director: CrewMember | null;
+  writer: CrewMember | null;
+  producer: CrewMember | null;
+  trailer_url: string | null;
+  videos: MovieVideo[];
+};
+
 export type MovieResponse = {
   page?: number;
   results: Movie[];
@@ -50,7 +89,10 @@ export const moviesApi = createApi({
         params: { page },
       }),
     }),
-    searchMovies: builder.query<MovieResponse, { query: string; page?: number }>({
+    searchMovies: builder.query<
+      MovieResponse,
+      { query: string; page?: number }
+    >({
       query: ({ query, page = 1 }) => ({
         url: "/api/movies/search",
         method: "get",
@@ -60,6 +102,12 @@ export const moviesApi = createApi({
     getMovieById: builder.query<Movie, number>({
       query: (id) => ({
         url: `/api/movies/${id}`,
+        method: "get",
+      }),
+    }),
+    getMovieDetailsExtended: builder.query<MovieExtended, number>({
+      query: (id) => ({
+        url: `/api/movies/${id}/extended`,
         method: "get",
       }),
     }),
@@ -73,4 +121,5 @@ export const {
   useGetHollywoodQuery,
   useSearchMoviesQuery,
   useGetMovieByIdQuery,
+  useGetMovieDetailsExtendedQuery,
 } = moviesApi;

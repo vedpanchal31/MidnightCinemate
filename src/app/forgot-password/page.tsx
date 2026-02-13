@@ -18,11 +18,15 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { showToast } from "@/lib/toast";
+import { useForgotPasswordMutation } from "@/store/authApi";
+import { useDispatch } from "react-redux";
+import { setEmail as setEmailInRedux } from "@/store/authSlice";
 
 export default function ForgotPasswordPage() {
   const router = useRouter();
+  const dispatch = useDispatch();
+  const [forgotPassword, { isLoading }] = useForgotPasswordMutation();
   const [email, setEmail] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [errors, setErrors] = useState({
     email: "",
@@ -54,43 +58,24 @@ export default function ForgotPasswordPage() {
       return;
     }
 
-    setIsSubmitting(true);
-
-    // Show loading toast
-    const loadingToast = showToast.loading("Sending reset code...");
-
     try {
-      // Simulate API call to send reset code
-      await new Promise((resolve, reject) => {
-        setTimeout(() => {
-          // Simulate 90% success rate
-          if (Math.random() > 0.1) {
-            resolve({ success: true });
-          } else {
-            reject(new Error("Failed to send reset code. Please try again."));
-          }
-        }, 2000);
-      });
+      await forgotPassword({ email }).unwrap();
 
-      setIsSubmitting(false);
-      showToast.dismiss(loadingToast);
       showToast.auth.passwordResetSent();
       setIsSubmitted(true);
 
-      // Store email for OTP page
-      localStorage.setItem("resetEmail", email);
+      // Store email in Redux state for OTP page
+      dispatch(setEmailInRedux(email));
 
       // Redirect to OTP verification after 2 seconds
       setTimeout(() => {
         router.push("/verify-otp?purpose=reset-password");
       }, 2000);
-    } catch (error) {
-      setIsSubmitting(false);
-      showToast.dismiss(loadingToast);
+    } catch (error: unknown) {
       const errorMessage =
-        error instanceof Error
-          ? error.message
-          : "An unexpected error occurred. Please try again.";
+        (error as Error & { data?: { message?: string } })?.data?.message ||
+        (error as Error)?.message ||
+        "Failed to send reset code. Please try again.";
       showToast.auth.passwordResetError(errorMessage);
       setErrors({
         email: "",
@@ -252,11 +237,10 @@ export default function ForgotPasswordPage() {
                         placeholder="Enter your email"
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
-                        className={`pl-10 h-10 bg-zinc-800/50 border-zinc-700/50 text-white placeholder:text-zinc-500 focus:border-primary focus:ring-2 focus:ring-primary/20 ${
-                          errors.email
-                            ? "border-red-500 focus:border-red-500 focus:ring-red-500/20"
-                            : ""
-                        }`}
+                        className={`pl-10 h-10 bg-zinc-800/50 border-zinc-700/50 text-white placeholder:text-zinc-500 focus:border-primary focus:ring-2 focus:ring-primary/20 ${errors.email
+                          ? "border-red-500 focus:border-red-500 focus:ring-red-500/20"
+                          : ""
+                          }`}
                         required
                       />
                     </div>
@@ -270,13 +254,13 @@ export default function ForgotPasswordPage() {
 
                   <Button
                     type="submit"
-                    disabled={!email || isSubmitting}
+                    disabled={!email || isLoading}
                     className="w-full text-white font-bold py-3 rounded-xl shadow-lg shadow-primary/25 transform hover:scale-[1.02] transition-all duration-300 text-base flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
                     style={{
                       background: "linear-gradient(to right, #E50914, #8b0000)",
                     }}
                   >
-                    {isSubmitting ? (
+                    {isLoading ? (
                       <>
                         <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                         Sending Code...
