@@ -30,8 +30,6 @@ import { useTranslation } from "react-i18next";
 import { FormikInput } from "@/components/FormikInput";
 
 import { useSignUpMutation } from "@/store/authApi";
-import { useDispatch } from "react-redux";
-import { setEmail } from "@/store/authSlice";
 import { handleError } from "@/helpers/HelperFunction";
 import { ThemeToggle } from "@/components/ThemeToggle";
 
@@ -39,7 +37,6 @@ export default function SignUpPage() {
   const router = useRouter();
   const { t } = useTranslation();
   const [signUp] = useSignUpMutation();
-  const dispatch = useDispatch();
 
   // Validation schema with Yup
   const signupSchema = Yup.object().shape({
@@ -82,13 +79,11 @@ export default function SignUpPage() {
       if (result.success) {
         showToast.auth.signupSuccess();
 
-        // Store email for OTP verification
-        dispatch(setEmail(values.email));
-        localStorage.setItem("signupEmail", values.email);
-
-        // Redirect to OTP verification
+        // Redirect to OTP verification with email parameter
         setTimeout(() => {
-          router.push("/verify-otp?purpose=signup");
+          router.push(
+            `/verify-otp?purpose=signup&email=${encodeURIComponent(values.email)}`,
+          );
         }, 1500);
       }
     } catch (error) {
