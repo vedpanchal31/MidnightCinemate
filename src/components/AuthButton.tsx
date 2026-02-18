@@ -1,22 +1,24 @@
 "use client";
 
-import React from 'react';
-import Link from 'next/link';
-import { Button } from '@/components/ui/button';
-import { User, LogOut } from 'lucide-react';
-import { RootState } from '@/store/store';
-import { AuthState } from '@/store/authSlice';
+import React from "react";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { User, LogOut, Ticket } from "lucide-react";
+import { RootState } from "@/store/store";
+import { AuthState } from "@/store/authSlice";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { useSelector } from 'react-redux';
-import useLogout from '@/hooks/uselogout';
+import { useSelector } from "react-redux";
+import useLogout from "@/hooks/uselogout";
 
 export default function AuthButton() {
   const { logout } = useLogout();
-  const { user, isAuthenticated } = useSelector((state: RootState) => state.auth as AuthState);
+  const { user, isAuthenticated } = useSelector(
+    (state: RootState) => state.auth as AuthState,
+  );
 
   if (isAuthenticated && user) {
     return (
@@ -31,20 +33,33 @@ export default function AuthButton() {
             </div>
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="w-64 bg-zinc-900 border-zinc-800 text-white p-4 shadow-xl shadow-black/50" align="end">
+        <PopoverContent
+          className="w-64 bg-zinc-900 border-zinc-800 text-white p-4 shadow-xl shadow-black/50"
+          align="end"
+        >
           <div className="grid gap-4">
             <div className="flex items-center gap-3 pb-4 border-b border-zinc-800">
               <div className="h-10 w-10 rounded-full bg-primary/20 flex items-center justify-center border border-primary/30">
                 <User className="h-5 w-5 text-primary" />
               </div>
               <div className="space-y-1 overflow-hidden">
-                <h4 className="text-sm font-semibold leading-none truncate">{user.name || "User"}</h4>
-                <p className="text-xs text-zinc-400 break-all truncate">{user.email}</p>
+                <h4 className="text-sm font-semibold leading-none truncate">
+                  {user.name || "User"}
+                </h4>
+                <p className="text-xs text-zinc-400 break-all truncate">
+                  {user.email}
+                </p>
               </div>
             </div>
 
             <div className="grid gap-1">
-              {/* Future links can go here */}
+              <Link
+                href="/transactions"
+                className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-zinc-300 hover:text-white hover:bg-white/5 rounded-lg transition-all group"
+              >
+                <Ticket className="h-4 w-4 text-zinc-500 group-hover:text-primary transition-colors" />
+                My Transactions
+              </Link>
             </div>
 
             <Button
@@ -65,7 +80,10 @@ export default function AuthButton() {
   return (
     <div className="flex items-center gap-3">
       <Link href="/login">
-        <Button variant="outline" className="bg-zinc-900/50 border-zinc-700 text-white hover:bg-zinc-800/50 backdrop-blur-sm transition-all duration-300 hover:border-zinc-500">
+        <Button
+          variant="outline"
+          className="bg-zinc-900/50 border-zinc-700 text-white hover:bg-zinc-800/50 backdrop-blur-sm transition-all duration-300 hover:border-zinc-500"
+        >
           Login
         </Button>
       </Link>
