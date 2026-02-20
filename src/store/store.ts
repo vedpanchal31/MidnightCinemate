@@ -1,7 +1,7 @@
 // Clean, auth-only store
-import { configureStore, Reducer, UnknownAction } from '@reduxjs/toolkit';
-import { persistStore, persistReducer } from 'redux-persist';
-import storage from 'redux-persist/lib/storage';
+import { configureStore } from "@reduxjs/toolkit";
+import { persistStore, persistReducer } from "redux-persist";
+import storage from "redux-persist/lib/storage";
 
 // Import auth and movies API
 import authReducer, { AuthState } from "./authSlice";
@@ -14,18 +14,33 @@ const authPersistConfig = {
   version: 1,
   storage,
   whitelist: [
-    "user", "token", "refreshToken", "userType", "preferences", "roleType",
-    "email", "verifyUserEmail", "verifyUserMobile",
-    "forgotPasswordUserMobile", "resendOTPTimer",
-    "isGuestUser", "fcmToken", "redirectPath",
-    "mobile", "countryCode", "resetPasswordToken"
+    "user",
+    "token",
+    "isAuthenticated",
+    "refreshToken",
+    "userType",
+    "preferences",
+    "roleType",
+    "email",
+    "verifyUserEmail",
+    "verifyUserMobile",
+    "forgotPasswordUserMobile",
+    "resendOTPTimer",
+    "isGuestUser",
+    "fcmToken",
+    "redirectPath",
+    "mobile",
+    "countryCode",
+    "resetPasswordToken",
   ],
 };
+
+const persistedReducer = persistReducer(authPersistConfig, authReducer);
 
 // Configure auth-only store
 export const store = configureStore({
   reducer: {
-    auth: persistReducer(authPersistConfig, authReducer) as Reducer<unknown, UnknownAction, unknown>,
+    auth: persistedReducer,
     [authApi.reducerPath]: authApi.reducer,
     [moviesApi.reducerPath]: moviesApi.reducer,
   },

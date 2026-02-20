@@ -4,25 +4,105 @@ import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, Clock, Users, Calendar, Star } from "lucide-react";
 import { useGetMovieDetailsExtendedQuery } from "@/store/moviesApi";
-import { ShimmerText } from "@/components/ui/shimmer";
+import { Shimmer, ShimmerText, ShimmerCard } from "@/components/ui/shimmer";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { cn } from "@/lib/utils";
+import ProfileIcon from "@/components/ProfileIcon";
 
 interface TimeSlot {
   id: string;
   time: string;
   availableSeats: number;
   totalSeats: number;
+  screenType: string;
+  screenIcon: string;
 }
 
-// Mock time slots data
-const generateTimeSlots = (): TimeSlot[] => {
-  return [
-    { id: "1", time: "10:00 AM", availableSeats: 12, totalSeats: 100 },
-    { id: "2", time: "01:30 PM", availableSeats: 45, totalSeats: 100 },
-    { id: "3", time: "05:00 PM", availableSeats: 8, totalSeats: 100 },
-    { id: "4", time: "08:30 PM", availableSeats: 2, totalSeats: 100 },
-    { id: "5", time: "11:00 PM", availableSeats: 67, totalSeats: 100 },
+interface DateSlot {
+  date: Date;
+  dayName: string;
+  dayNumber: number;
+  month: string;
+  isToday: boolean;
+}
+
+// Mock time slots data - can be modified based on date
+const generateTimeSlots = (date: Date): TimeSlot[] => {
+  // You can customize time slots based on the date here
+  const baseSlots = [
+    {
+      id: "1",
+      time: "10:00 AM",
+      availableSeats: 12,
+      totalSeats: 100,
+      screenType: "Standard (2D)",
+      screenIcon: "",
+    },
+    {
+      id: "2",
+      time: "01:30 PM",
+      availableSeats: 45,
+      totalSeats: 100,
+      screenType: "3D Screen",
+      screenIcon: "",
+    },
+    {
+      id: "3",
+      time: "05:00 PM",
+      availableSeats: 8,
+      totalSeats: 100,
+      screenType: "IMAX",
+      screenIcon: "",
+    },
+    {
+      id: "4",
+      time: "08:30 PM",
+      availableSeats: 2,
+      totalSeats: 100,
+      screenType: "4DX",
+      screenIcon: "",
+    },
+    {
+      id: "5",
+      time: "11:00 PM",
+      availableSeats: 67,
+      totalSeats: 100,
+      screenType: "Dolby Cinema",
+      screenIcon: "",
+    },
   ];
+
+  // Randomize availability slightly based on date for demo
+  const dateSeed = date.getDate();
+  return baseSlots.map((slot, index) => ({
+    ...slot,
+    availableSeats: Math.max(
+      0,
+      slot.availableSeats + Math.floor((dateSeed + index) % 20) - 10,
+    ),
+  }));
+};
+
+// Generate date slots for next 7 days
+const generateDateSlots = (): DateSlot[] => {
+  const dates: DateSlot[] = [];
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  for (let i = 0; i < 7; i++) {
+    const date = new Date(today);
+    date.setDate(today.getDate() + i);
+
+    dates.push({
+      date,
+      dayName: date.toLocaleDateString("en-US", { weekday: "short" }),
+      dayNumber: date.getDate(),
+      month: date.toLocaleDateString("en-US", { month: "short" }),
+      isToday: i === 0,
+    });
+  }
+
+  return dates;
 };
 
 export default function MovieDetailsPage({
@@ -34,6 +114,11 @@ export default function MovieDetailsPage({
   const [movieId, setMovieId] = useState<number | null>(null);
   const [timeSlots, setTimeSlots] = useState<TimeSlot[]>([]);
   const [selectedVideoUrl, setSelectedVideoUrl] = useState<string | null>(null);
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const [selectedTimeSlot, setSelectedTimeSlot] = useState<TimeSlot | null>(
+    null,
+  );
+  const [isDateTransitioning, setIsDateTransitioning] = useState(false);
 
   // Use extended query to get full movie data with cast and trailer
   const { data: movie, isLoading } = useGetMovieDetailsExtendedQuery(
@@ -47,12 +132,25 @@ export default function MovieDetailsPage({
     params.then((p) => {
       const id = parseInt(p.id);
       setMovieId(id);
-      setTimeSlots(generateTimeSlots());
+      setTimeSlots(generateTimeSlots(selectedDate));
     });
-  }, [params]);
+  }, [params, selectedDate]);
 
-  const handleTimeSlotClick = () => {
-    router.push(`/booking/${movieId}`);
+  const handleTimeSlotClick = (slot: TimeSlot) => {
+    setSelectedTimeSlot(slot);
+    const formattedDate = selectedDate.toISOString().split("T")[0];
+    router.push(
+      `/booking/${movieId}?date=${formattedDate}&time=${slot.time}&slotId=${slot.id}&screen=${slot.screenType}`,
+    );
+  };
+
+  const handleDateSelect = (dateSlot: DateSlot) => {
+    setIsDateTransitioning(true);
+    setTimeout(() => {
+      setSelectedDate(dateSlot.date);
+      setSelectedTimeSlot(null);
+      setIsDateTransitioning(false);
+    }, 150);
   };
 
   const getAvailabilityStatus = (availableSeats: number) => {
@@ -64,19 +162,25 @@ export default function MovieDetailsPage({
   };
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] text-white">
+    <div className="min-h-screen bg-background text-foreground">
       {/* Header */}
-      <header className="p-4 border-b border-white/10 backdrop-blur-md sticky top-0 z-50 bg-black/50">
-        <div className="max-w-6xl mx-auto flex items-center gap-4">
-          <button
-            onClick={() => router.back()}
-            className="p-2 hover:bg-white/10 rounded-full transition-colors"
-          >
-            <ChevronLeft className="w-6 h-6" />
-          </button>
-          <h1 className="text-xl font-bold">
-            {movie?.title || <ShimmerText className="h-6 w-48" />}
-          </h1>
+      <header className="p-4 border-b border-border backdrop-blur-md sticky top-0 z-50 bg-background/80">
+        <div className="max-w-6xl mx-auto flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => router.back()}
+              className="p-2 hover:bg-accent rounded-full transition-colors"
+            >
+              <ChevronLeft className="w-6 h-6" />
+            </button>
+            <h1 className="text-xl font-bold">
+              {movie?.title || <ShimmerText className="h-6 w-48" />}
+            </h1>
+          </div>
+          <div className="flex items-center gap-4">
+            <ThemeToggle />
+            <ProfileIcon />
+          </div>
         </div>
       </header>
 
@@ -84,8 +188,80 @@ export default function MovieDetailsPage({
       <main className="max-w-6xl mx-auto px-4 py-8">
         {isLoading ? (
           <div className="space-y-8">
-            <ShimmerText className="h-96" />
-            <ShimmerText className="h-40" />
+            {/* Movie Details Shimmer */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+              <div className="lg:col-span-2 space-y-6">
+                {/* Movie Poster and Info Shimmer */}
+                <div className="bg-zinc-900/50 rounded-2xl border border-zinc-800 overflow-hidden">
+                  <Shimmer className="aspect-video w-full" />
+                  <div className="p-6 space-y-4">
+                    <ShimmerText className="h-8 w-3/4" />
+                    <div className="flex items-center gap-4">
+                      <Shimmer className="h-6 w-20 rounded-full" />
+                      <Shimmer className="h-6 w-16 rounded-full" />
+                      <Shimmer className="h-6 w-24 rounded-full" />
+                    </div>
+                    <ShimmerText lines={3} className="w-full" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Cast Section Shimmer */}
+              <div className="space-y-4">
+                <Shimmer className="h-6 w-32" />
+                <div className="grid grid-cols-2 gap-3">
+                  {Array.from({ length: 6 }).map((_, i) => (
+                    <div
+                      key={i}
+                      className="bg-zinc-900/50 rounded-xl border border-zinc-800 overflow-hidden"
+                    >
+                      <Shimmer className="h-24 w-full" />
+                      <div className="p-3 space-y-2">
+                        <Shimmer className="h-4 w-20" />
+                        <Shimmer className="h-3 w-16" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Date Selector Shimmer */}
+            <div className="space-y-4">
+              <Shimmer className="h-6 w-32" />
+              <div className="flex gap-3">
+                {Array.from({ length: 7 }).map((_, i) => (
+                  <Shimmer key={i} className="h-20 w-20 rounded-xl" />
+                ))}
+              </div>
+            </div>
+
+            {/* Time Slots Shimmer */}
+            <div className="space-y-4">
+              <Shimmer className="h-6 w-32" />
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <div
+                    key={i}
+                    className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-4 space-y-3 min-h-[180px]"
+                  >
+                    <div className="flex flex-col items-center space-y-1 pb-2 border-b border-zinc-700/50">
+                      <Shimmer className="h-8 w-8 rounded-lg" />
+                      <Shimmer className="h-3 w-16" />
+                    </div>
+                    <div className="flex items-center justify-center gap-2">
+                      <Shimmer className="h-4 w-4 rounded" />
+                      <Shimmer className="h-6 w-16 rounded" />
+                    </div>
+                    <div className="space-y-2">
+                      <Shimmer className="h-3 w-20 rounded" />
+                      <Shimmer className="h-3 w-16 rounded" />
+                    </div>
+                    <Shimmer className="h-1 w-full rounded-full mt-auto" />
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         ) : movie ? (
           <div className="space-y-12">
@@ -275,12 +451,12 @@ export default function MovieDetailsPage({
                       </div>
                     ))
                   ) : movie?.cast && movie.cast.length > 0 ? (
-                    movie.cast.map((actor) => (
+                    movie.cast.slice(0, 6).map((actor) => (
                       <div
                         key={actor.id}
                         className="bg-zinc-900/50 rounded-xl border border-zinc-800 overflow-hidden hover:border-primary/50 transition-colors"
                       >
-                        <div className="w-full h-56 bg-zinc-800 overflow-hidden flex items-center justify-center">
+                        <div className="w-full h-24 bg-zinc-800 overflow-hidden flex items-center justify-center">
                           {actor.profile_url ? (
                             // eslint-disable-next-line @next/next/no-img-element
                             <img
@@ -306,9 +482,11 @@ export default function MovieDetailsPage({
                       </div>
                     ))
                   ) : (
-                    <p className="text-zinc-400 text-sm">
-                      No cast information available
-                    </p>
+                    <div className="grid grid-cols-2 gap-3">
+                      {Array.from({ length: 6 }).map((_, i) => (
+                        <ShimmerCard key={i} />
+                      ))}
+                    </div>
                   )}
                 </div>
               </div>
@@ -317,13 +495,91 @@ export default function MovieDetailsPage({
             {/* Time Slots Section */}
             <section className="space-y-4">
               <h2 className="text-2xl font-bold">Select Show Time</h2>
-              <div className="bg-zinc-900/50 rounded-2xl border border-zinc-800 p-6 space-y-6">
-                {/* Date Selector (Today) */}
-                <div className="flex items-center gap-2 pb-4 border-b border-zinc-700">
-                  <Calendar className="w-5 h-5 text-primary" />
-                  <span className="font-semibold">Today</span>
-                  <span className="text-sm text-zinc-400 ml-auto">
-                    {new Date().toLocaleDateString("en-US", {
+              <div className="bg-zinc-900/50 rounded-2xl border border-zinc-800 p-6 space-y-6 overflow-x-hidden">
+                {/* Date Selector */}
+                <div className="space-y-4 w-full">
+                  <div className="flex items-center gap-2">
+                    <Calendar className="w-5 h-5 text-primary" />
+                    <span className="font-semibold">Select Date</span>
+                  </div>
+                  <div className="relative w-full">
+                    <div className="flex gap-3 overflow-x-auto overflow-y-hidden pb-3 px-1 -mx-1 custom-scrollbar-horizontal">
+                      <div className="flex gap-3 min-w-max p-5">
+                        {generateDateSlots().map((dateSlot, index) => {
+                          const isSelected =
+                            selectedDate.toDateString() ===
+                            dateSlot.date.toDateString();
+                          return (
+                            <button
+                              key={dateSlot.date.toISOString()}
+                              onClick={() => handleDateSelect(dateSlot)}
+                              className={cn(
+                                "flex flex-col items-center p-3 rounded-xl border transition-all duration-300 min-w-[80px] transform",
+                                "hover:scale-105 hover:-translate-y-1",
+                                isSelected
+                                  ? "border-primary bg-primary/20 text-white scale-105 -translate-y-1 shadow-lg shadow-primary/30"
+                                  : "border-zinc-700 bg-zinc-800/50 hover:border-primary/50 hover:bg-primary/10",
+                                dateSlot.isToday &&
+                                  !isSelected &&
+                                  "ring-2 ring-primary/30",
+                                "animate-in fade-in slide-in-from-bottom-2",
+                              )}
+                              style={{
+                                animationDelay: `${index * 50}ms`,
+                                animationDuration: "400ms",
+                                animationFillMode: "both",
+                              }}
+                            >
+                              <span className="text-xs font-medium text-zinc-400 mb-1 transition-colors duration-200">
+                                {dateSlot.dayName}
+                              </span>
+                              <span className="text-lg font-bold mb-1 transition-transform duration-200 group-hover:scale-110">
+                                {dateSlot.dayNumber}
+                              </span>
+                              <span className="text-xs text-zinc-400 transition-colors duration-200">
+                                {dateSlot.month}
+                              </span>
+                              {dateSlot.isToday && (
+                                <span className="text-xs text-primary font-semibold mt-1 animate-pulse">
+                                  Today
+                                </span>
+                              )}
+                              {/* Selection indicator */}
+                              {isSelected && (
+                                <div className="absolute -top-1 -right-1 w-3 h-3 bg-primary rounded-full animate-in zoom-in-95 duration-300">
+                                  <div className="w-full h-full bg-primary rounded-full animate-ping absolute" />
+                                </div>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Selected Date Display */}
+                <div
+                  className={cn(
+                    "flex items-center gap-2 pb-4 border-b border-zinc-700 transition-all duration-300",
+                    isDateTransitioning && "opacity-50 scale-95",
+                  )}
+                >
+                  <Calendar
+                    className={cn(
+                      "w-5 h-5 text-primary transition-transform duration-300",
+                      isDateTransitioning && "animate-spin",
+                    )}
+                  />
+                  <span className="font-semibold transition-all duration-300">
+                    {selectedDate.toLocaleDateString("en-US", {
+                      weekday: "long",
+                      month: "long",
+                      day: "numeric",
+                    })}
+                  </span>
+                  <span className="text-sm text-zinc-400 ml-auto transition-all duration-300">
+                    {selectedDate.toLocaleDateString("en-US", {
                       month: "short",
                       day: "numeric",
                     })}
@@ -331,8 +587,13 @@ export default function MovieDetailsPage({
                 </div>
 
                 {/* Time Slots Grid */}
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-                  {timeSlots.map((slot) => {
+                <div
+                  className={cn(
+                    "grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 transition-all duration-500",
+                    isDateTransitioning && "opacity-0 scale-95",
+                  )}
+                >
+                  {timeSlots.map((slot, index) => {
                     const availability = getAvailabilityStatus(
                       slot.availableSeats,
                     );
@@ -341,40 +602,71 @@ export default function MovieDetailsPage({
                     return (
                       <button
                         key={slot.id}
-                        onClick={() => isAvailable && handleTimeSlotClick()}
+                        onClick={() => isAvailable && handleTimeSlotClick(slot)}
                         disabled={!isAvailable}
                         className={cn(
-                          "relative p-4 rounded-xl border transition-all duration-300 text-center space-y-2",
+                          "relative p-4 rounded-xl border transition-all duration-300 text-center space-y-3 transform min-h-[180px]",
+                          "hover:scale-105 hover:-translate-y-1",
                           isAvailable
-                            ? "border-zinc-700 bg-zinc-800/50 hover:border-primary hover:bg-primary/10 hover:scale-105 cursor-pointer"
+                            ? "border-zinc-700 bg-zinc-800/50 hover:border-primary hover:bg-primary/10 cursor-pointer"
                             : "border-zinc-800 bg-zinc-900/30 cursor-not-allowed opacity-50",
+                          selectedTimeSlot?.id === slot.id &&
+                            "border-primary bg-primary/20 scale-105 -translate-y-1 shadow-lg shadow-primary/30",
+                          "animate-in fade-in slide-in-from-bottom-2",
                         )}
+                        style={{
+                          animationDelay: `${index * 100}ms`,
+                          animationDuration: "500ms",
+                          animationFillMode: "both",
+                        }}
                       >
-                        <div className="flex items-center justify-center gap-2">
-                          <Clock className="w-4 h-4" />
-                          <span className="font-bold text-lg">{slot.time}</span>
+                        {/* Screen Type Header */}
+                        <div className="flex flex-col items-center space-y-1 pb-2 border-b border-zinc-700/50">
+                          <span className="text-2xl">{slot.screenIcon}</span>
+                          <span className="text-xs font-semibold text-primary truncate max-w-full">
+                            {slot.screenType}
+                          </span>
                         </div>
-                        <p
-                          className={cn(
-                            "text-xs font-semibold",
-                            availability.color,
-                          )}
-                        >
-                          {availability.text}
-                        </p>
-                        <p className="text-xs text-zinc-400">
-                          {slot.availableSeats} seats
-                        </p>
+
+                        {/* Time Display */}
+                        <div className="flex items-center justify-center gap-2">
+                          <Clock className="w-4 h-4 transition-transform duration-200 group-hover:scale-110" />
+                          <span className="font-bold text-lg transition-transform duration-200 group-hover:scale-110">
+                            {slot.time}
+                          </span>
+                        </div>
+
+                        {/* Availability Info */}
+                        <div className="space-y-2">
+                          <p
+                            className={cn(
+                              "text-xs font-semibold transition-colors duration-200",
+                              availability.color,
+                            )}
+                          >
+                            {availability.text}
+                          </p>
+                          <p className="text-xs text-zinc-400 transition-opacity duration-200">
+                            {slot.availableSeats} seats
+                          </p>
+                        </div>
 
                         {/* Availability indicator bar */}
-                        <div className="w-full h-1 bg-zinc-700 rounded-full overflow-hidden mt-2">
+                        <div className="w-full h-1 bg-zinc-700 rounded-full overflow-hidden mt-auto">
                           <div
-                            className="h-full bg-linear-to-r from-primary to-red-600"
+                            className="h-full bg-gradient-to-r from-primary to-red-600 transition-all duration-700 ease-out"
                             style={{
                               width: `${(slot.availableSeats / slot.totalSeats) * 100}%`,
                             }}
                           />
                         </div>
+
+                        {/* Selection indicator */}
+                        {selectedTimeSlot?.id === slot.id && (
+                          <div className="absolute -top-2 -right-2 w-4 h-4 bg-primary rounded-full animate-in zoom-in-95 duration-300">
+                            <div className="w-full h-full bg-primary rounded-full animate-ping absolute" />
+                          </div>
+                        )}
                       </button>
                     );
                   })}

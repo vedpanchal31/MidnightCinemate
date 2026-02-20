@@ -3,14 +3,17 @@
 import React, { useState, useEffect } from "react";
 import { useSelector } from "react-redux";
 import { Button } from "@/components/ui/button";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, Users, Calendar } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { useGetMovieByIdQuery } from "@/store/moviesApi";
 import { ShimmerText } from "@/components/ui/shimmer";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import UnauthorizedBookingModal from "@/components/UnauthorizedBookingModal";
+import ProfileIcon from "@/components/ProfileIcon";
 import { RootState } from "@/store/store";
 import { AuthState } from "@/store/authSlice";
+import { useSearchParams } from "next/navigation";
 
 interface Seat {
   id: string;
@@ -78,9 +81,22 @@ export default function BookingPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  const searchParams = useSearchParams();
+
+  // Initialize state from search params
+  const initialDate = searchParams.get("date") || "";
+  const initialTime = searchParams.get("time") || "";
+  const initialSlotId = searchParams.get("slotId") || "";
+  const initialScreenType = searchParams.get("screen") || "standard";
+
   const [selectedSeats, setSelectedSeats] = useState<string[]>([]);
   const [movieId, setMovieId] = useState<number | null>(null);
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const [selectedDate, setSelectedDate] = useState<string>(initialDate);
+  const [selectedTime, setSelectedTime] = useState<string>(initialTime);
+  const [selectedSlotId, setSelectedSlotId] = useState<string>(initialSlotId);
+  const [selectedScreenType, setSelectedScreenType] =
+    useState<string>(initialScreenType);
 
   // Get auth state
   const { isAuthenticated } = useSelector(
@@ -99,7 +115,33 @@ export default function BookingPage({
 
   const movieTitle = movie?.title || <ShimmerText className="h-8 w-64" />;
   const theaterName = "Midnight Cinemas: Screen 1";
-  const showTime = "Today, 09:30 PM";
+
+  // Get screen type display name
+  const getScreenTypeDisplay = () => {
+    return selectedScreenType || "Standard (2D)";
+  };
+
+  // Format the show date and time
+  const formatShowDateTime = () => {
+    if (!selectedDate || !selectedTime) {
+      return "Today, 09:30 PM";
+    }
+
+    try {
+      const date = new Date(selectedDate + "T00:00:00");
+      const formattedDate = date.toLocaleDateString("en-US", {
+        weekday: "short",
+        month: "short",
+        day: "numeric",
+      });
+      return `${formattedDate}, ${selectedTime}`;
+    } catch {
+      return "Today, 09:30 PM";
+    }
+  };
+
+  const showTime = formatShowDateTime();
+  const screenTypeDisplay = getScreenTypeDisplay();
 
   const handleSeatClick = (seatId: string, isBooked: boolean) => {
     if (isBooked) return;
@@ -123,26 +165,26 @@ export default function BookingPage({
   }, 0);
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] text-white flex flex-col">
+    <div className="min-h-screen bg-background text-foreground flex flex-col">
       {/* Unauthorized Booking Modal */}
       <UnauthorizedBookingModal
         show={showAuthModal}
         close={() => setShowAuthModal(false)}
       />
       {/* Header */}
-      <header className="p-4 border-b border-white/10 backdrop-blur-md sticky top-0 z-50 bg-black/50">
+      <header className="p-4 border-b border-border backdrop-blur-md sticky top-0 z-50 bg-background/80">
         <div className="max-w-5xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-4">
             <Link
-              href="/movies"
-              className="p-2 hover:bg-white/10 rounded-full transition-colors"
+              href={`/movie-details/${movieId}`}
+              className="p-2 hover:bg-accent rounded-full transition-colors"
             >
               <ChevronLeft className="w-6 h-6" />
             </Link>
             <div>
               <h1 className="text-xl font-bold leading-tight">{movieTitle}</h1>
               <p className="text-sm text-zinc-400">
-                {theaterName} | {showTime}
+                {theaterName} | {screenTypeDisplay} | {showTime}
               </p>
             </div>
           </div>
@@ -153,6 +195,8 @@ export default function BookingPage({
                 Fast Booking Active
               </span>
             </div>
+            <ThemeToggle />
+            <ProfileIcon />
           </div>
         </div>
       </header>
@@ -229,24 +273,31 @@ export default function BookingPage({
                         disabled={isBooked}
                         onClick={() => handleSeatClick(seat.id, isBooked)}
                         className={cn(
-                          "relative group w-9 h-9 md:w-10 md:h-10 rounded-xl transition-all duration-300",
+                          "relative group w-9 h-9 md:w-10 md:h-10 rounded-xl transition-all duration-300 transform",
+                          "hover:scale-110 hover:-translate-y-1",
                           marginClass,
                           isBooked
-                            ? "bg-zinc-900/50 cursor-not-allowed scale-90 grayscale"
+                            ? "bg-zinc-900/50 cursor-not-allowed scale-90 grayscale opacity-60"
                             : isSelected
-                              ? "bg-primary text-white scale-110 shadow-[0_0_25px_rgba(229,9,20,0.6)] ring-2 ring-primary/50 ring-offset-4 ring-offset-black z-10"
+                              ? "bg-primary text-white scale-110 shadow-[0_0_25px_rgba(229,9,20,0.6)] ring-2 ring-primary/50 ring-offset-4 ring-offset-black z-10 animate-in zoom-in-95"
                               : cn(
-                                  "bg-white/5 border border-white/10 hover:border-primary/50 hover:bg-primary/10 hover:scale-110 hover:-translate-y-1",
+                                  "bg-white/5 border border-white/10 hover:border-primary/50 hover:bg-primary/10",
                                   seat.type === "VIP"
-                                    ? "border-purple-500/30"
+                                    ? "border-purple-500/30 hover:border-purple-400/50"
                                     : seat.type === "PREMIUM"
-                                      ? "border-blue-500/30"
+                                      ? "border-blue-500/30 hover:border-blue-400/50"
                                       : "",
                                 ),
+                          "animate-in fade-in slide-in-from-bottom-2",
                         )}
+                        style={{
+                          animationDelay: `${(rowIndex * 8 + seat.number) * 20}ms`,
+                          animationDuration: "600ms",
+                          animationFillMode: "both",
+                        }}
                       >
                         {/* Seat Number Tooltip */}
-                        <div className="absolute -top-10 left-1/2 -translate-x-1/2 px-2 py-1 bg-zinc-800 rounded text-[9px] font-bold opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none border border-white/10 whitespace-nowrap z-50">
+                        <div className="absolute -top-10 left-1/2 -translate-x-1/2 px-2 py-1 bg-zinc-800 rounded text-[9px] font-bold opacity-0 group-hover:opacity-100 transition-all duration-300 pointer-events-none border border-white/10 whitespace-nowrap z-50 transform group-hover:scale-110 group-hover:-translate-y-1">
                           {seat.type} {row}
                           {seat.number} • ₹{seat.price}
                         </div>
@@ -254,16 +305,16 @@ export default function BookingPage({
                         {/* Aesthetic chair details */}
                         <div
                           className={cn(
-                            "absolute inset-[2px] rounded-lg flex items-center justify-center overflow-hidden",
+                            "absolute inset-[2px] rounded-lg flex items-center justify-center overflow-hidden transition-all duration-300",
                             isSelected ? "bg-primary" : "bg-transparent",
                           )}
                         >
                           <span
                             className={cn(
-                              "text-[10px] font-bold transition-opacity",
+                              "text-[10px] font-bold transition-all duration-300",
                               isSelected
-                                ? "opacity-100"
-                                : "opacity-0 group-hover:opacity-40",
+                                ? "opacity-100 scale-110"
+                                : "opacity-0 group-hover:opacity-40 group-hover:scale-110",
                             )}
                           >
                             {seat.number}
@@ -271,7 +322,7 @@ export default function BookingPage({
                         </div>
 
                         {/* Chair "Legs/Base" for realistic look */}
-                        <div className="absolute bottom-[-2px] left-1/2 -translate-x-1/2 w-[80%] h-[2px] bg-current opacity-20" />
+                        <div className="absolute bottom-[-2px] left-1/2 -translate-x-1/2 w-[80%] h-[2px] bg-current opacity-20 transition-opacity duration-300 group-hover:opacity-40" />
                       </button>
                     );
                   })}
@@ -289,23 +340,31 @@ export default function BookingPage({
       {/* Checkout Bar Overlay */}
       <div
         className={cn(
-          "fixed bottom-8 left-1/2 -translate-x-1/2 w-[90%] max-w-4xl z-[100] transition-all duration-500 transform",
+          "fixed bottom-8 left-1/2 -translate-x-1/2 w-[90%] max-w-4xl z-[100] transition-all duration-700 transform",
           selectedSeats.length > 0
-            ? "translate-y-0 opacity-100"
+            ? "translate-y-0 opacity-100 animate-in slide-in-from-bottom-4"
             : "translate-y-20 opacity-0 pointer-events-none",
         )}
       >
-        <div className="bg-zinc-900/80 backdrop-blur-2xl border border-white/10 p-5 rounded-[2rem] shadow-[0_30px_60px_-15px_rgba(0,0,0,0.8)] flex flex-col md:flex-row items-center justify-between gap-6 px-10">
+        <div className="bg-zinc-900/80 backdrop-blur-2xl border border-white/10 p-5 rounded-[2rem] shadow-[0_30px_60px_-15px_rgba(0,0,0,0.8)] flex flex-col md:flex-row items-center justify-between gap-6 px-10 transition-all duration-300 hover:shadow-[0_40px_80px_-20px_rgba(0,0,0,0.9)]">
           <div className="flex items-center gap-8">
             <div className="space-y-1">
-              <p className="text-[10px] tracking-widest uppercase font-bold text-zinc-500">
+              <p className="text-[10px] tracking-widest uppercase font-bold text-zinc-500 transition-colors duration-300">
                 Tickets
               </p>
               <div className="flex flex-wrap gap-2">
-                {selectedSeats.sort().map((s) => (
+                {selectedSeats.sort().map((s, index) => (
                   <span
                     key={s}
-                    className="px-3 py-1 bg-primary/20 text-primary text-xs font-black rounded-lg border border-primary/30"
+                    className={cn(
+                      "px-3 py-1 bg-primary/20 text-primary text-xs font-black rounded-lg border border-primary/30 transition-all duration-300 transform",
+                      "hover:scale-110 hover:bg-primary/30 animate-in fade-in slide-in-from-left-2",
+                    )}
+                    style={{
+                      animationDelay: `${index * 100}ms`,
+                      animationDuration: "400ms",
+                      animationFillMode: "both",
+                    }}
                   >
                     {s}
                   </span>
@@ -316,14 +375,14 @@ export default function BookingPage({
             <div className="w-[1px] h-10 bg-white/10 hidden md:block" />
 
             <div className="space-y-0">
-              <p className="text-[10px] tracking-widest uppercase font-bold text-zinc-500">
+              <p className="text-[10px] tracking-widest uppercase font-bold text-zinc-500 transition-colors duration-300">
                 Payable Amount
               </p>
               <div className="flex items-baseline gap-1">
-                <span className="text-3xl font-black text-white">
+                <span className="text-3xl font-black text-white transition-all duration-300 hover:scale-105">
                   ₹{totalPrice}
                 </span>
-                <span className="text-zinc-500 text-xs font-medium">
+                <span className="text-zinc-500 text-xs font-medium transition-colors duration-300">
                   incl. taxes
                 </span>
               </div>
@@ -332,7 +391,7 @@ export default function BookingPage({
 
           <Button
             asChild
-            className="w-full md:w-auto px-10 h-14 bg-primary hover:bg-primary/90 text-white font-black text-lg rounded-2xl shadow-[0_10px_30px_-10px_rgba(229,9,20,0.5)] group"
+            className="w-full md:w-auto px-10 h-14 bg-primary hover:bg-primary/90 text-white font-black text-lg rounded-2xl shadow-[0_10px_30px_-10px_rgba(229,9,20,0.5)] group transition-all duration-300 transform hover:scale-105 hover:shadow-[0_15px_40px_-10px_rgba(229,9,20,0.7)]"
             onClick={() => {
               if (!isAuthenticated) {
                 setShowAuthModal(true);
@@ -342,15 +401,15 @@ export default function BookingPage({
             {isAuthenticated ? (
               <Link href="/checkout" className="flex items-center gap-3">
                 Checkout Now
-                <div className="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center group-hover:bg-white/40 transition-colors">
-                  <ChevronLeft className="w-5 h-5 rotate-180" />
+                <div className="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center group-hover:bg-white/40 transition-all duration-300 group-hover:scale-110 group-hover:rotate-12">
+                  <ChevronLeft className="w-5 h-5 rotate-180 transition-transform duration-300 group-hover:translate-x-0.5" />
                 </div>
               </Link>
             ) : (
               <span className="flex items-center gap-3">
                 Checkout Now
-                <div className="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center group-hover:bg-white/40 transition-colors">
-                  <ChevronLeft className="w-5 h-5 rotate-180" />
+                <div className="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center group-hover:bg-white/40 transition-all duration-300 group-hover:scale-110 group-hover:rotate-12">
+                  <ChevronLeft className="w-5 h-5 rotate-180 transition-transform duration-300 group-hover:translate-x-0.5" />
                 </div>
               </span>
             )}

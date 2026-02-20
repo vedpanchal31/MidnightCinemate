@@ -1,5 +1,5 @@
-import { createSlice, PayloadAction } from '@reduxjs/toolkit';
-import { User, UserWithoutPassword } from '@/lib/database/schema';
+import { createSlice, PayloadAction } from "@reduxjs/toolkit";
+import { User, UserWithoutPassword } from "@/lib/database/schema";
 
 interface AuthState {
   user: UserWithoutPassword | null;
@@ -26,6 +26,7 @@ interface AuthState {
     currency: string;
     isSidebarCollapsed: boolean;
     localcurrency: boolean;
+    theme: "light" | "dark";
   };
   userUpdateProfileImage: File | null;
   roleType: number | undefined;
@@ -52,24 +53,32 @@ const initialState: AuthState = {
   currencyRates: {},
   userType: 1, // Default user type
   preferences: {
-    language: 'EN',
-    currency: 'SAR',
+    language: "EN",
+    currency: "SAR",
     isSidebarCollapsed: false,
     localcurrency: false,
+    theme: "dark",
   },
   userUpdateProfileImage: null,
   roleType: undefined,
 };
 
 const authSlice = createSlice({
-  name: 'auth',
+  name: "auth",
   initialState,
   reducers: {
     loginStart: (state) => {
       state.isLoading = true;
       state.error = null;
     },
-    loginSuccess: (state, action: PayloadAction<{ user: UserWithoutPassword; token: string; refreshToken: string }>) => {
+    loginSuccess: (
+      state,
+      action: PayloadAction<{
+        user: UserWithoutPassword;
+        token: string;
+        refreshToken: string;
+      }>,
+    ) => {
       state.isLoading = false;
       state.user = action.payload.user;
       state.token = action.payload.token;
@@ -102,7 +111,13 @@ const authSlice = createSlice({
     setEmail: (state, action: PayloadAction<string | null>) => {
       state.email = action.payload;
     },
-    setMobile: (state, action: PayloadAction<{ mobile: string | null; countryCode: string | null }>) => {
+    setMobile: (
+      state,
+      action: PayloadAction<{
+        mobile: string | null;
+        countryCode: string | null;
+      }>,
+    ) => {
       state.mobile = action.payload.mobile;
       state.countryCode = action.payload.countryCode;
     },
@@ -148,13 +163,19 @@ const authSlice = createSlice({
     setGuestUserStatus: (state, action: PayloadAction<boolean>) => {
       state.isGuestUser = action.payload;
     },
-    setRedirectPath: (state, action: PayloadAction<{ path: string; venueId?: string } | null>) => {
+    setRedirectPath: (
+      state,
+      action: PayloadAction<{ path: string; venueId?: string } | null>,
+    ) => {
       state.redirectPath = action.payload;
     },
     clearRedirectPath: (state) => {
       state.redirectPath = null;
     },
-    setCurrencyRates: (state, action: PayloadAction<Record<string, number>>) => {
+    setCurrencyRates: (
+      state,
+      action: PayloadAction<Record<string, number>>,
+    ) => {
       state.currencyRates = action.payload;
     },
     changeLanguageSelection: (state, action: PayloadAction<string>) => {
@@ -168,6 +189,9 @@ const authSlice = createSlice({
     },
     setLocalCurrency: (state, action: PayloadAction<boolean>) => {
       state.preferences.localcurrency = action.payload;
+    },
+    setTheme: (state, action: PayloadAction<"light" | "dark">) => {
+      state.preferences.theme = action.payload;
     },
     setVerificationStatus: (state, action: PayloadAction<boolean>) => {
       state.verifyUserEmail = action.payload;
@@ -208,6 +232,7 @@ export const {
   setCurrency,
   setIsSidebarCollapsed,
   setLocalCurrency,
+  setTheme,
   setVerificationStatus,
 } = authSlice.actions;
 

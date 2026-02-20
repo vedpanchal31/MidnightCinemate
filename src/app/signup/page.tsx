@@ -31,6 +31,7 @@ import { FormikInput } from "@/components/FormikInput";
 
 import { useSignUpMutation } from "@/store/authApi";
 import { handleError } from "@/helpers/HelperFunction";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 export default function SignUpPage() {
   const router = useRouter();
@@ -205,15 +206,15 @@ export default function SignUpPage() {
 
         <div className="w-full max-w-sm lg:max-w-md relative z-10">
           {/* Mobile logo */}
-          <Link
-            href="/"
-            className="lg:hidden flex items-center justify-center gap-3 mb-6 group"
-          >
-            <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center shadow-lg shadow-red-900/50 group-hover:scale-105 transition-transform">
-              <Film className="w-5 h-5 text-white" />
-            </div>
-            <span className="text-xl font-bold text-white">Cinemate</span>
-          </Link>
+          <div className="lg:hidden flex items-center justify-between gap-3 mb-6 group">
+            <Link href="/" className="flex items-center justify-center gap-3">
+              <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center shadow-lg shadow-red-900/50 group-hover:scale-105 transition-transform">
+                <Film className="w-5 h-5 text-white" />
+              </div>
+              <span className="text-xl font-bold text-white">Cinemate</span>
+            </Link>
+            <ThemeToggle />
+          </div>
 
           <div className="bg-zinc-900/60 border border-zinc-800/50 backdrop-blur-2xl shadow-2xl rounded-2xl p-6 lg:p-8">
             <div className="text-center space-y-3 mb-6 lg:mb-8">
