@@ -44,6 +44,12 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error("Error creating booking:", error);
     const message = error?.message || "Internal server error";
+    const isDuplicateSeatConstraint =
+      error?.code === "23505" ||
+      message.includes("duplicate key value") ||
+      message.includes("idx_booking_seat_active_unique") ||
+      message.includes("idx_movie_booking_active_seat_unique") ||
+      message.includes("unique_movie_slot_seat");
     const conflictMessages = [
       "Seats already taken",
       "Not enough seats available",
@@ -52,15 +58,19 @@ export async function POST(request: NextRequest) {
       "Selected time does not match the time slot",
       "Selected time slot is not active",
       "Invalid timeslot_id",
+      "Duplicate seats selected",
     ];
-    const isConflict = conflictMessages.some((entry) =>
-      message.includes(entry),
-    );
+    const isConflict =
+      isDuplicateSeatConstraint ||
+      conflictMessages.some((entry) => message.includes(entry));
+    const normalizedMessage = isDuplicateSeatConstraint
+      ? "Seats already taken"
+      : message;
 
     return NextResponse.json(
       {
         success: false,
-        message: isConflict ? message : "Internal server error",
+        message: isConflict ? normalizedMessage : "Internal server error",
         error: error.message,
         detail: error.detail, // Useful for Postgres errors like constraint violations
       },

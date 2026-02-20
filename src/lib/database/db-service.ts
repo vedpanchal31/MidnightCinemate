@@ -9,6 +9,7 @@ import {
   BookingStatus,
   Payment,
 } from "./schema";
+import { getScreenTypeCapacity, type ScreenType } from "@/data/screenLayouts";
 
 export interface User {
   id: string;
@@ -157,13 +158,10 @@ export const findRecentOTP = async (
 };
 
 const DEFAULT_SHOW_TIMES = ["10:00", "13:30", "17:00", "20:30"];
-const DEFAULT_SCREEN_TYPES: TimeSlot["screen_type"][] = [
-  "2D",
-  "3D",
-  "IMAX",
-  "4DX",
-];
-const DEFAULT_TOTAL_SEATS = 100;
+const DEFAULT_SCREEN_TYPES: ScreenType[] = ["2D", "3D", "IMAX", "4DX"];
+const DEFAULT_SCREEN_CAPACITIES = DEFAULT_SCREEN_TYPES.map((screenType) =>
+  getScreenTypeCapacity(screenType),
+);
 const SLOT_WINDOW_DAYS = 365;
 
 const formatDbDate = async (value: string | Date): Promise<string> => {
@@ -176,9 +174,24 @@ const mapTimeslotRowToModel = async (
   fallbackMovieId?: number,
 ): Promise<TimeSlot> => {
   const tmdbMovieId = Number(row.tmdb_movie_id ?? fallbackMovieId ?? 0);
-  const totalSeats = Number(row.total_seats ?? 0);
-  const availableSeats = Number(row.available_seats ?? 0);
+  const screenType = String(row.screen_type ?? "2D");
+  const storedTotalSeats = Number(row.total_seats ?? 0);
+  const totalSeats = Math.min(
+    storedTotalSeats,
+    getScreenTypeCapacity(screenType),
+  );
+  const storedAvailableSeats = Number(row.available_seats ?? 0);
   const bookedCount = Number(row.booked_count ?? 0);
+  const rawAvailableSeats =
+    bookedCount > 0 ? totalSeats - bookedCount : storedAvailableSeats;
+  const normalizedAvailableSeats = Math.max(
+    0,
+    Math.min(totalSeats, rawAvailableSeats),
+  );
+  const normalizedBookedSeats = Math.max(
+    0,
+    Math.min(totalSeats, totalSeats - normalizedAvailableSeats),
+  );
 
   return {
     id: String(row.id),
@@ -186,12 +199,10 @@ const mapTimeslotRowToModel = async (
     show_date: await formatDbDate((row.show_date as string | Date) ?? ""),
     show_time: String(row.startTime ?? row.show_time),
     total_seats: totalSeats,
-    available_seats:
-      bookedCount > 0 ? Math.max(0, totalSeats - bookedCount) : availableSeats,
-    booked_seats:
-      bookedCount > 0 ? bookedCount : Math.max(0, totalSeats - availableSeats),
+    available_seats: normalizedAvailableSeats,
+    booked_seats: normalizedBookedSeats,
     price: Number(row.price ?? 12.99),
-    screen_type: (row.screen_type as TimeSlot["screen_type"]) || "2D",
+    screen_type: (screenType as TimeSlot["screen_type"]) || "2D",
     is_active: Boolean(row.isActive ?? row.is_active),
     created_at: row.createdAt as Date,
     updated_at: row.updatedAt as Date,
@@ -242,6 +253,62 @@ export const ensureTimeSlotInfrastructure = async (): Promise<void> => {
     CREATE UNIQUE INDEX IF NOT EXISTS idx_timeslot_api_log_tmdb_movie_id_unique
     ON "TimeSlotApiLog"(tmdb_movie_id)
     WHERE tmdb_movie_id IS NOT NULL;
+  `);
+
+  // Allow seat re-booking after cancellation/refund while still preventing
+  // duplicate active reservations for the same seat in a slot.
+  await db.query(
+    'ALTER TABLE "MovieBooking" DROP CONSTRAINT IF EXISTS unique_movie_slot_seat',
+  );
+  await db.query("DROP INDEX IF EXISTS idx_movie_booking_active_seat_unique");
+  await db.query(
+    'ALTER TABLE "MovieBooking" ALTER COLUMN seat_id DROP NOT NULL',
+  );
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS "BookingSeat" (
+      id BIGSERIAL PRIMARY KEY,
+      booking_id INTEGER NOT NULL REFERENCES "MovieBooking"(id) ON DELETE CASCADE,
+      tmdb_movie_id INTEGER NOT NULL,
+      timeslot_id UUID NOT NULL,
+      seat_id VARCHAR(10) NOT NULL,
+      status INTEGER NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+  await db.query(`
+    CREATE INDEX IF NOT EXISTS idx_booking_seat_booking_id
+    ON "BookingSeat"(booking_id);
+  `);
+  await db.query(`
+    INSERT INTO "BookingSeat"(booking_id, tmdb_movie_id, timeslot_id, seat_id, status, created_at, updated_at)
+    SELECT
+      mb.id,
+      mb.tmdb_movie_id,
+      mb.timeslot_id,
+      mb.seat_id,
+      CASE
+        WHEN mb.status::text ~ '^[0-9]+$' THEN mb.status::int
+        WHEN LOWER(mb.status::text) = 'pending_payment' THEN ${BookingStatus.PENDING_PAYMENT}
+        WHEN LOWER(mb.status::text) = 'confirmed' THEN ${BookingStatus.CONFIRMED}
+        WHEN LOWER(mb.status::text) = 'failed' THEN ${BookingStatus.FAILED}
+        WHEN LOWER(mb.status::text) = 'expired' THEN ${BookingStatus.EXPIRED}
+        WHEN LOWER(mb.status::text) = 'cancelled' THEN ${BookingStatus.CANCELLED}
+        WHEN LOWER(mb.status::text) = 'refunded' THEN ${BookingStatus.REFUNDED}
+        ELSE ${BookingStatus.CANCELLED}
+      END,
+      mb.created_at,
+      mb.updated_at
+    FROM "MovieBooking" mb
+    LEFT JOIN "BookingSeat" bs
+      ON bs.booking_id = mb.id AND bs.seat_id = mb.seat_id
+    WHERE mb.seat_id IS NOT NULL
+      AND bs.id IS NULL;
+  `);
+  await db.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_booking_seat_active_unique
+    ON "BookingSeat"(tmdb_movie_id, timeslot_id, seat_id)
+    WHERE status IN (${BookingStatus.PENDING_PAYMENT}, ${BookingStatus.CONFIRMED});
   `);
 };
 
@@ -325,7 +392,7 @@ export const ensureTimeSlotsForMovie = async (
        SELECT unnest($4::time[]) AS show_time
      ),
      screens AS (
-       SELECT unnest($5::text[]) AS screen_type
+       SELECT * FROM unnest($5::text[], $6::int[]) AS s(screen_type, total_seats)
      )
      INSERT INTO "Timeslot"
        (tmdb_movie_id, show_date, "startTime", "endTime", screen_type, total_seats, available_seats, "isActive", "createdAt", "updatedAt")
@@ -335,8 +402,8 @@ export const ensureTimeSlotsForMovie = async (
        t.show_time,
        t.show_time,
        s.screen_type,
-       $6,
-       $6,
+       s.total_seats,
+       s.total_seats,
        true,
        CURRENT_TIMESTAMP,
        CURRENT_TIMESTAMP
@@ -358,7 +425,7 @@ export const ensureTimeSlotsForMovie = async (
       endDate,
       DEFAULT_SHOW_TIMES,
       DEFAULT_SCREEN_TYPES,
-      DEFAULT_TOTAL_SEATS,
+      DEFAULT_SCREEN_CAPACITIES,
     ],
   );
 
@@ -400,7 +467,7 @@ export const getTimeSlotsByMovie = async (
     FROM "Timeslot" t
     LEFT JOIN (
       SELECT timeslot_id, tmdb_movie_id, COUNT(*) as booked_count
-      FROM "MovieBooking"
+      FROM "BookingSeat"
       WHERE status IN ($2, $3)
       GROUP BY timeslot_id, tmdb_movie_id
     ) b ON t.id = b.timeslot_id AND b.tmdb_movie_id = $1
@@ -512,7 +579,7 @@ export const getAllTimeSlots = async (
     FROM "Timeslot" t
     LEFT JOIN (
       SELECT timeslot_id, tmdb_movie_id, COUNT(*) AS booked_count
-      FROM "MovieBooking"
+      FROM "BookingSeat"
       WHERE status IN ($1, $2)
       GROUP BY timeslot_id, tmdb_movie_id
     ) b ON t.id = b.timeslot_id AND b.tmdb_movie_id = t.tmdb_movie_id
@@ -564,6 +631,10 @@ export const createBooking = async (
   const client = await db.pool.connect();
   try {
     await client.query("BEGIN");
+    const uniqueSeatIds = [...new Set(bookingData.seat_ids)];
+    if (uniqueSeatIds.length !== bookingData.seat_ids.length) {
+      throw new Error("Duplicate seats selected");
+    }
 
     // 0. Validate that the slot belongs to the same TMDB movie and is active.
     // Lock row to avoid race conditions while we reserve seats.
@@ -573,6 +644,7 @@ export const createBooking = async (
          tmdb_movie_id,
          show_date,
          "startTime",
+         screen_type,
          total_seats,
          "isActive",
          to_char(show_date, 'YYYY-MM-DD') AS slot_show_date,
@@ -614,7 +686,7 @@ export const createBooking = async (
     // 1. Enforce total seat capacity by movie/slot.
     const bookedCountResult = await client.query(
       `SELECT COUNT(*)::int AS booked_count
-       FROM "MovieBooking"
+       FROM "BookingSeat"
        WHERE timeslot_id = $1
          AND tmdb_movie_id = $2
          AND status IN ($3, $4)`,
@@ -627,8 +699,11 @@ export const createBooking = async (
     );
 
     const bookedCount = Number(bookedCountResult.rows[0]?.booked_count || 0);
-    const totalSeats = Number(slot.total_seats || 0);
-    const requestedSeats = bookingData.seat_ids.length;
+    const totalSeats = Math.min(
+      Number(slot.total_seats || 0),
+      getScreenTypeCapacity(slot.screen_type as ScreenType),
+    );
+    const requestedSeats = uniqueSeatIds.length;
 
     if (bookedCount + requestedSeats > totalSeats) {
       throw new Error("Not enough seats available for this time slot");
@@ -636,14 +711,14 @@ export const createBooking = async (
 
     // 2. Check if any requested seats are already booked/pending for this movie/slot.
     const checkSeatsQuery = `
-      SELECT seat_id FROM "MovieBooking"
+      SELECT seat_id FROM "BookingSeat"
       WHERE timeslot_id = $1 AND tmdb_movie_id = $2 AND seat_id = ANY($3) 
       AND status IN ($4, $5)
     `;
     const checkSeatsResult = await client.query(checkSeatsQuery, [
       bookingData.timeslot_id,
       bookingData.tmdb_movie_id,
-      bookingData.seat_ids,
+      uniqueSeatIds,
       BookingStatus.CONFIRMED,
       BookingStatus.PENDING_PAYMENT,
     ]);
@@ -653,45 +728,51 @@ export const createBooking = async (
       throw new Error(`Seats already taken: ${taken}`);
     }
 
-    const values: (string | number)[] = [];
-    const placeholders: string[] = [];
-    let paramCount = 1;
-
-    // Split total using integer paise to avoid floating-point drift.
-    const totalPaise = Math.round(bookingData.amount * 100);
-    const seatCount = bookingData.seat_ids.length;
-    const baseSeatPaise = Math.floor(totalPaise / seatCount);
-    const remainderPaise = totalPaise - baseSeatPaise * seatCount;
-
-    bookingData.seat_ids.forEach((seatId, index) => {
-      const seatPaise = baseSeatPaise + (index < remainderPaise ? 1 : 0);
-      const seatPrice = seatPaise / 100;
-      placeholders.push(
-        `($${paramCount}, $${paramCount + 1}, $${paramCount + 2}, $${paramCount + 3}, $${paramCount + 4}, $${paramCount + 5}, $${paramCount + 6}, $${paramCount + 7})`,
-      );
-      values.push(
+    const bookingResult = await client.query(
+      `INSERT INTO "MovieBooking" (user_id, tmdb_movie_id, show_date, show_time, price, status, timeslot_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING *`,
+      [
         bookingData.user_id || "guest",
         bookingData.tmdb_movie_id,
         bookingData.show_date,
         bookingData.show_time,
-        seatId,
-        seatPrice,
+        bookingData.amount,
         BookingStatus.PENDING_PAYMENT,
         bookingData.timeslot_id,
+      ],
+    );
+
+    const booking = bookingResult.rows[0];
+    if (!booking) {
+      throw new Error("Failed to create booking");
+    }
+
+    const seatValues: (string | number)[] = [];
+    const seatPlaceholders: string[] = [];
+    let seatParamCount = 1;
+    uniqueSeatIds.forEach((seatId) => {
+      seatPlaceholders.push(
+        `($${seatParamCount}, $${seatParamCount + 1}, $${seatParamCount + 2}, $${seatParamCount + 3}, $${seatParamCount + 4})`,
       );
-      paramCount += 8;
+      seatValues.push(
+        booking.id,
+        bookingData.tmdb_movie_id,
+        bookingData.timeslot_id,
+        seatId,
+        BookingStatus.PENDING_PAYMENT,
+      );
+      seatParamCount += 5;
     });
 
-    const insertQuery = `
-      INSERT INTO "MovieBooking" (user_id, tmdb_movie_id, show_date, show_time, seat_id, price, status, timeslot_id)
-      VALUES ${placeholders.join(", ")}
-      RETURNING *
-    `;
-
-    const result = await client.query(insertQuery, values);
+    await client.query(
+      `INSERT INTO "BookingSeat" (booking_id, tmdb_movie_id, timeslot_id, seat_id, status)
+       VALUES ${seatPlaceholders.join(", ")}`,
+      seatValues,
+    );
 
     await client.query("COMMIT");
-    return result.rows;
+    return [{ ...booking, seat_ids: uniqueSeatIds }];
   } catch (error) {
     await client.query("ROLLBACK");
     throw error;
@@ -704,18 +785,20 @@ export const getBookingsByMovieAndTime = async (
   tmdb_movie_id: number,
   show_date: string,
   show_time: string,
-): Promise<Booking[]> => {
+): Promise<Array<{ seat_id: string }>> => {
   // Ensure show_time is in a consistent format
   const sanitizedTime = show_time.includes(":")
     ? show_time.split(":").slice(0, 3).join(":")
     : show_time;
 
   const result = await db.query(
-    `SELECT * FROM "MovieBooking" 
-     WHERE tmdb_movie_id = $1 
+    `SELECT bs.seat_id
+     FROM "BookingSeat" bs
+     INNER JOIN "MovieBooking" mb ON mb.id = bs.booking_id
+     WHERE bs.tmdb_movie_id = $1 
      AND show_date = $2::date
      AND show_time = $3::time
-     AND status IN ($4, $5)`,
+     AND bs.status IN ($4, $5)`,
     [
       tmdb_movie_id,
       show_date,
@@ -731,9 +814,18 @@ export const getBookingsByUser = async (
   user_id: string,
 ): Promise<Booking[]> => {
   const result = await db.query(
-    `SELECT * FROM "MovieBooking" 
-     WHERE user_id = $1 
-     ORDER BY created_at DESC`,
+    `SELECT
+      mb.*,
+      COALESCE(
+        ARRAY_AGG(bs.seat_id ORDER BY bs.seat_id)
+          FILTER (WHERE bs.seat_id IS NOT NULL),
+        '{}'
+      ) AS seat_ids
+     FROM "MovieBooking" mb
+     LEFT JOIN "BookingSeat" bs ON bs.booking_id = mb.id
+     WHERE mb.user_id = $1
+     GROUP BY mb.id
+     ORDER BY mb.created_at DESC`,
     [user_id],
   );
   return result.rows;
@@ -778,13 +870,33 @@ export const updateBookingStatusBySession = async (
   status: BookingStatus,
   paymentId?: string,
 ): Promise<boolean> => {
-  const result = await db.query(
-    `UPDATE "MovieBooking" 
-     SET status = $2, stripe_payment_id = COALESCE($3, stripe_payment_id)
-     WHERE stripe_session_id = $1`,
-    [sessionId, status, paymentId || null],
-  );
-  return result.rowCount ? result.rowCount > 0 : false;
+  const client = await db.pool.connect();
+  try {
+    await client.query("BEGIN");
+    const result = await client.query(
+      `UPDATE "MovieBooking" 
+       SET status = $2, stripe_payment_id = COALESCE($3, stripe_payment_id), updated_at = CURRENT_TIMESTAMP
+       WHERE stripe_session_id = $1
+       RETURNING id`,
+      [sessionId, status, paymentId || null],
+    );
+    const updatedIds = result.rows.map((row) => Number(row.id));
+    if (updatedIds.length > 0) {
+      await client.query(
+        `UPDATE "BookingSeat"
+         SET status = $1, updated_at = CURRENT_TIMESTAMP
+         WHERE booking_id = ANY($2)`,
+        [status, updatedIds],
+      );
+    }
+    await client.query("COMMIT");
+    return result.rowCount ? result.rowCount > 0 : false;
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
 };
 
 export const cancelBookingsByIds = async (
@@ -793,32 +905,70 @@ export const cancelBookingsByIds = async (
 ): Promise<number> => {
   if (!bookingIds.length) return 0;
 
-  const result = await db.query(
-    `UPDATE "MovieBooking"
-     SET status = $1, updated_at = CURRENT_TIMESTAMP
-     WHERE user_id = $2
-       AND id = ANY($3)
-       AND status IN ($4, $5)`,
-    [
-      BookingStatus.CANCELLED,
-      userId,
-      bookingIds,
-      BookingStatus.PENDING_PAYMENT,
-      BookingStatus.CONFIRMED,
-    ],
-  );
-
-  return result.rowCount || 0;
+  const client = await db.pool.connect();
+  try {
+    await client.query("BEGIN");
+    const result = await client.query(
+      `UPDATE "MovieBooking"
+       SET status = $1, updated_at = CURRENT_TIMESTAMP
+       WHERE user_id = $2
+         AND id = ANY($3)
+         AND status IN ($4, $5)
+       RETURNING id`,
+      [
+        BookingStatus.CANCELLED,
+        userId,
+        bookingIds,
+        BookingStatus.PENDING_PAYMENT,
+        BookingStatus.CONFIRMED,
+      ],
+    );
+    const updatedIds = result.rows.map((row) => Number(row.id));
+    if (updatedIds.length > 0) {
+      await client.query(
+        `UPDATE "BookingSeat"
+         SET status = $1, updated_at = CURRENT_TIMESTAMP
+         WHERE booking_id = ANY($2)`,
+        [BookingStatus.CANCELLED, updatedIds],
+      );
+    }
+    await client.query("COMMIT");
+    return result.rowCount || 0;
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
 };
 
 export const expirePendingBookingsBeforeShow = async (): Promise<number> => {
-  const result = await db.query(
-    `UPDATE "MovieBooking"
-     SET status = $1
-     WHERE status = $2
-       AND (show_date::timestamp + show_time) <= (CURRENT_TIMESTAMP + INTERVAL '1 hour')`,
-    [BookingStatus.EXPIRED, BookingStatus.PENDING_PAYMENT],
-  );
-
-  return result.rowCount || 0;
+  const client = await db.pool.connect();
+  try {
+    await client.query("BEGIN");
+    const result = await client.query(
+      `UPDATE "MovieBooking"
+       SET status = $1, updated_at = CURRENT_TIMESTAMP
+       WHERE status = $2
+         AND (show_date::timestamp + show_time) <= (CURRENT_TIMESTAMP + INTERVAL '1 hour')
+       RETURNING id`,
+      [BookingStatus.EXPIRED, BookingStatus.PENDING_PAYMENT],
+    );
+    const updatedIds = result.rows.map((row) => Number(row.id));
+    if (updatedIds.length > 0) {
+      await client.query(
+        `UPDATE "BookingSeat"
+         SET status = $1, updated_at = CURRENT_TIMESTAMP
+         WHERE booking_id = ANY($2)`,
+        [BookingStatus.EXPIRED, updatedIds],
+      );
+    }
+    await client.query("COMMIT");
+    return result.rowCount || 0;
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
 };

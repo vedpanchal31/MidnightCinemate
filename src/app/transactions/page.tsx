@@ -16,8 +16,14 @@ import {
   CheckCircle2,
   XCircle,
   Timer,
-  ArrowRight,
 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   useGetUserBookingsQuery,
   useGetMovieByIdQuery,
@@ -38,7 +44,8 @@ interface BookingItem {
   tmdb_movie_id: number;
   show_date: string;
   show_time: string;
-  seat_id: string;
+  seat_id?: string;
+  seat_ids?: string[];
   price: number | string;
   status: number; // Numeric status 1-6
   timeslot_id: string;
@@ -58,6 +65,30 @@ interface GroupedBookingTransaction extends Omit<
   totalAmount: number;
   movie_title?: string;
 }
+
+const sortSeatLabels = (seats: string[]) => {
+  return [...new Set(seats)].sort((a, b) => {
+    const aMatch = a.match(/^([A-Za-z]+)(\d+)$/);
+    const bMatch = b.match(/^([A-Za-z]+)(\d+)$/);
+    if (!aMatch || !bMatch) return a.localeCompare(b);
+
+    const [, aRow, aNum] = aMatch;
+    const [, bRow, bNum] = bMatch;
+    if (aRow !== bRow) return aRow.localeCompare(bRow);
+    return Number(aNum) - Number(bNum);
+  });
+};
+
+const getSeatPreview = (seats: string[], limit: number = 4) => {
+  const sorted = sortSeatLabels(seats);
+  const previewSeats = sorted.slice(0, limit);
+  const remainingCount = Math.max(0, sorted.length - previewSeats.length);
+  return {
+    sorted,
+    previewSeats,
+    remainingCount,
+  };
+};
 
 const getStatusDetails = (status: number) => {
   switch (status) {
@@ -103,11 +134,11 @@ const getStatusDetails = (status: number) => {
       };
     case BookingStatus.REFUNDED:
       return {
-        label: "Refunded",
-        icon: ArrowRight,
-        color: "text-blue-500",
-        bg: "bg-blue-500/10",
-        border: "border-blue-500/20",
+        label: "Cancelled",
+        icon: XCircle,
+        color: "text-orange-500",
+        bg: "bg-orange-500/10",
+        border: "border-orange-500/20",
       };
     default:
       return {
@@ -120,40 +151,64 @@ const getStatusDetails = (status: number) => {
   }
 };
 
-const MovieBadge = ({ movieId }: { movieId: number }) => {
-  const { data: movie, isLoading } = useGetMovieByIdQuery(movieId);
+const MovieDataGate = ({
+  movieId,
+  onStateChange,
+  children,
+}: {
+  movieId: number;
+  onStateChange?: (
+    movieId: number,
+    state: "loading" | "success" | "error",
+  ) => void;
+  children: (payload: {
+    movie:
+      | {
+          title?: string;
+          poster_url?: string | null;
+        }
+      | undefined;
+    isLoading: boolean;
+    isError: boolean;
+  }) => React.ReactNode;
+}) => {
+  const { data: movie, isLoading, isError } = useGetMovieByIdQuery(movieId);
+  React.useEffect(() => {
+    if (!onStateChange) return;
+    if (isError) {
+      onStateChange(movieId, "error");
+      return;
+    }
+    if (isLoading) {
+      onStateChange(movieId, "loading");
+      return;
+    }
+    onStateChange(movieId, "success");
+  }, [isError, isLoading, movieId, onStateChange]);
 
-  if (isLoading) return <Shimmer className="h-4 w-32 rounded" />;
-  return (
-    <span className="text-white font-bold">
-      {movie?.title || `Movie #${movieId}`}
-    </span>
-  );
+  return <>{children({ movie, isLoading, isError })}</>;
 };
 
-const MoviePoster = ({ movieId }: { movieId: number }) => {
-  const { data: movie, isLoading } = useGetMovieByIdQuery(movieId);
-
-  if (isLoading) return <Shimmer className="w-full h-full rounded-xl" />;
-
-  return (
-    <div className="w-full h-full relative group">
-      {movie?.poster_url ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={movie.poster_url}
-          alt={movie.title}
-          className="w-full h-full object-cover rounded-xl transition-transform duration-500 group-hover:scale-110"
-        />
-      ) : (
-        <div className="w-full h-full flex items-center justify-center bg-zinc-800 rounded-xl">
-          <Ticket className="w-8 h-8 text-zinc-600" />
-        </div>
-      )}
-      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+const EmptyBookingsState = ({ onExplore }: { onExplore: () => void }) => (
+  <div className="min-h-[60vh] flex flex-col items-center justify-center text-center space-y-6">
+    <div className="w-24 h-24 bg-zinc-900/50 border border-white/5 rounded-[2.5rem] flex items-center justify-center shadow-2xl">
+      <Ticket className="w-10 h-10 text-zinc-700" />
     </div>
-  );
-};
+    <div className="space-y-2">
+      <h3 className="text-2xl font-black">No Bookings Yet</h3>
+      <p className="text-zinc-500 max-w-sm mx-auto font-medium">
+        Your cinematic journey hasn&apos;t started. Experience the magic of
+        movies today.
+      </p>
+    </div>
+    <button
+      onClick={onExplore}
+      className="mt-4 px-10 h-14 bg-white text-black font-black rounded-2xl hover:scale-105 transition-transform cursor-pointer"
+    >
+      Explore Movies
+    </button>
+  </div>
+);
 
 export default function TransactionsPage() {
   const router = useRouter();
@@ -175,6 +230,11 @@ export default function TransactionsPage() {
     useCancelBookingsMutation();
   const [cancelTarget, setCancelTarget] =
     React.useState<GroupedBookingTransaction | null>(null);
+  const [seatDialogTarget, setSeatDialogTarget] =
+    React.useState<GroupedBookingTransaction | null>(null);
+  const [movieLoadStates, setMovieLoadStates] = React.useState<
+    Record<number, "loading" | "success" | "error">
+  >({});
 
   const handlePayNow = async (tx: GroupedBookingTransaction) => {
     try {
@@ -239,8 +299,16 @@ export default function TransactionsPage() {
   }
 
   // Group bookings by session or just list them
-  const groupedBookings = (bookings as any[]).reduce(
-    (acc: Record<string, GroupedBookingTransaction>, booking: any) => {
+  const groupedBookings = (bookings as BookingItem[]).reduce<
+    Record<string, GroupedBookingTransaction>
+  >(
+    (acc, booking) => {
+      const normalizedSeats =
+        Array.isArray(booking.seat_ids) && booking.seat_ids.length > 0
+          ? booking.seat_ids
+          : booking.seat_id
+            ? [booking.seat_id]
+            : [];
       const pendingGroupKey = [
         booking.user_id || "guest",
         booking.tmdb_movie_id,
@@ -253,21 +321,26 @@ export default function TransactionsPage() {
       ].join("|");
       const key = booking.stripe_session_id || pendingGroupKey;
       if (!acc[key]) {
-        const { seat_id, price, ...rest } = booking;
+        const { price, ...rest } = booking;
         acc[key] = {
           ...rest,
-          seats: [seat_id],
+          seats: sortSeatLabels(normalizedSeats),
           bookingIds: [booking.id],
           totalAmount: Number(price),
         };
       } else {
-        acc[key].seats.push(booking.seat_id);
-        acc[key].bookingIds.push(booking.id);
+        acc[key].seats = sortSeatLabels([
+          ...acc[key].seats,
+          ...normalizedSeats,
+        ]);
+        if (!acc[key].bookingIds.includes(booking.id)) {
+          acc[key].bookingIds.push(booking.id);
+        }
         acc[key].totalAmount += Number(booking.price);
       }
       return acc;
     },
-    {},
+    {} as Record<string, GroupedBookingTransaction>,
   );
 
   const transactionList: GroupedBookingTransaction[] = Object.values(
@@ -277,6 +350,10 @@ export default function TransactionsPage() {
       new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
   );
 
+  const visibleTransactionCount = transactionList.filter((tx) => {
+    return movieLoadStates[tx.tmdb_movie_id] !== "error";
+  }).length;
+
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white">
       <header className="sticky top-0 z-50 bg-[#0a0a0a]/80 backdrop-blur-2xl border-b border-white/5">
@@ -284,7 +361,7 @@ export default function TransactionsPage() {
           <div className="flex items-center gap-4">
             <button
               onClick={() => router.push("/movies")}
-              className="w-10 h-10 flex items-center justify-center rounded-xl bg-white/5 hover:bg-white/10 transition-colors"
+              className="w-10 h-10 flex items-center justify-center rounded-xl bg-white/5 hover:bg-white/10 transition-colors cursor-pointer"
             >
               <ChevronLeft className="w-5 h-5" />
             </button>
@@ -295,7 +372,7 @@ export default function TransactionsPage() {
           <div className="flex items-center gap-2">
             <div className="px-3 py-1 bg-primary/10 border border-primary/20 rounded-full">
               <span className="text-[10px] font-black uppercase text-primary tracking-widest">
-                {transactionList.length} Transactions
+                {visibleTransactionCount} Transactions
               </span>
             </div>
           </div>
@@ -311,174 +388,229 @@ export default function TransactionsPage() {
           </div>
         ) : transactionList.length > 0 ? (
           <div className="space-y-8">
-            {transactionList.map((tx: GroupedBookingTransaction) => {
+            {transactionList.map((tx: GroupedBookingTransaction, index) => {
               const statusDetails = getStatusDetails(tx.status);
               const StatusIcon = statusDetails.icon;
+              const { sorted, previewSeats, remainingCount } = getSeatPreview(
+                tx.seats,
+              );
 
               return (
-                <div
+                <MovieDataGate
                   key={tx.id}
-                  className="group bg-zinc-900/40 backdrop-blur-xl border border-white/5 hover:border-white/10 transition-all duration-500 rounded-[2.5rem] overflow-hidden flex flex-col md:flex-row shadow-2xl hover:shadow-primary/5 shadow-black/50"
+                  movieId={tx.tmdb_movie_id}
+                  onStateChange={(movieId, state) => {
+                    setMovieLoadStates((prev) =>
+                      prev[movieId] === state
+                        ? prev
+                        : { ...prev, [movieId]: state },
+                    );
+                  }}
                 >
-                  <div className="w-full md:w-48 h-64 md:h-auto shrink-0 relative overflow-hidden p-4">
-                    <MoviePoster movieId={tx.tmdb_movie_id} />
-                  </div>
-
-                  <div className="flex-1 p-6 md:p-8 flex flex-col justify-between">
-                    <div className="space-y-4">
-                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                        <div className="space-y-1">
-                          <div
-                            className={`inline-flex items-center gap-2 px-3 py-1 rounded-full ${statusDetails.bg} ${statusDetails.border} ${statusDetails.color} mb-2`}
-                          >
-                            <StatusIcon className="w-3.5 h-3.5" />
-                            <span className="text-[10px] uppercase font-black tracking-widest">
-                              {statusDetails.label}
-                            </span>
-                          </div>
-                          <h2 className="text-2xl font-black text-white group-hover:text-primary transition-colors duration-300">
-                            <MovieBadge movieId={tx.tmdb_movie_id} />
-                          </h2>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-[10px] uppercase font-black text-zinc-500 tracking-widest mb-1">
-                            Total Amount
-                          </p>
-                          <p className="text-3xl font-black text-white">
-                            ₹{tx.totalAmount.toFixed(0)}
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 pt-6 border-t border-white/5">
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2 text-zinc-500 mb-1">
-                            <Calendar className="w-3.5 h-3.5" />
-                            <span className="text-[10px] uppercase font-bold tracking-widest">
-                              Date
-                            </span>
-                          </div>
-                          <p className="text-sm font-black">
-                            {moment(tx.show_date).format("ddd, MMM D, YYYY")}
-                          </p>
-                        </div>
-
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2 text-zinc-500 mb-1">
-                            <Clock className="w-3.5 h-3.5" />
-                            <span className="text-[10px] uppercase font-bold tracking-widest">
-                              Time
-                            </span>
-                          </div>
-                          <p className="text-sm font-black">
-                            {moment(`2000-01-01T${tx.show_time}`).format(
-                              "hh:mm A",
+                  {({
+                    movie,
+                    isLoading: isMovieLoading,
+                    isError: isMovieError,
+                  }) =>
+                    isMovieLoading ? (
+                      <Shimmer className="h-[420px] w-full rounded-[2.5rem]" />
+                    ) : isMovieError ? (
+                      index === 0 ? (
+                        <EmptyBookingsState
+                          onExplore={() => router.push("/movies")}
+                        />
+                      ) : null
+                    ) : (
+                      <div className="group bg-zinc-900/40 backdrop-blur-xl border border-white/5 hover:border-white/10 transition-all duration-500 rounded-[2.5rem] overflow-hidden flex flex-col md:flex-row shadow-2xl hover:shadow-primary/5 shadow-black/50 cursor-pointer">
+                        <div className="w-full md:w-48 h-64 md:h-auto shrink-0 relative overflow-hidden p-4">
+                          <div className="w-full h-full relative group">
+                            {movie?.poster_url ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={movie.poster_url}
+                                alt={movie.title || "Movie"}
+                                className="w-full h-full object-cover rounded-xl transition-transform duration-500 group-hover:scale-110"
+                              />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center bg-zinc-800 rounded-xl">
+                                <Ticket className="w-8 h-8 text-zinc-600" />
+                              </div>
                             )}
-                          </p>
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                          </div>
                         </div>
 
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2 text-zinc-500 mb-1">
-                            <SeatIcon className="w-3.5 h-3.5" />
-                            <span className="text-[10px] uppercase font-bold tracking-widest">
-                              Seats
-                            </span>
+                        <div className="flex-1 p-6 md:p-8 flex flex-col justify-between">
+                          <div className="space-y-4">
+                            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                              <div className="space-y-1">
+                                <div
+                                  className={`inline-flex items-center gap-2 px-3 py-1 rounded-full ${statusDetails.bg} ${statusDetails.border} ${statusDetails.color} mb-2`}
+                                >
+                                  <StatusIcon className="w-3.5 h-3.5" />
+                                  <span className="text-[10px] uppercase font-black tracking-widest">
+                                    {statusDetails.label}
+                                  </span>
+                                </div>
+                                <h2 className="text-2xl font-black text-white group-hover:text-primary transition-colors duration-300">
+                                  <span className="text-white font-bold">
+                                    {movie?.title ||
+                                      `Movie #${tx.tmdb_movie_id}`}
+                                  </span>
+                                </h2>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-[10px] uppercase font-black text-zinc-500 tracking-widest mb-1">
+                                  Total Amount
+                                </p>
+                                <p className="text-3xl font-black text-white">
+                                  ₹{tx.totalAmount.toFixed(0)}
+                                </p>
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 pt-6 border-t border-white/5">
+                              <div className="space-y-1">
+                                <div className="flex items-center gap-2 text-zinc-500 mb-1">
+                                  <Calendar className="w-3.5 h-3.5" />
+                                  <span className="text-[10px] uppercase font-bold tracking-widest">
+                                    Date
+                                  </span>
+                                </div>
+                                <p className="text-sm font-black">
+                                  {moment(tx.show_date).format(
+                                    "ddd, MMM D, YYYY",
+                                  )}
+                                </p>
+                              </div>
+
+                              <div className="space-y-1">
+                                <div className="flex items-center gap-2 text-zinc-500 mb-1">
+                                  <Clock className="w-3.5 h-3.5" />
+                                  <span className="text-[10px] uppercase font-bold tracking-widest">
+                                    Time
+                                  </span>
+                                </div>
+                                <p className="text-sm font-black">
+                                  {moment(`2000-01-01T${tx.show_time}`).format(
+                                    "hh:mm A",
+                                  )}
+                                </p>
+                              </div>
+
+                              <div className="space-y-1">
+                                <div className="flex items-center gap-2 text-zinc-500 mb-1">
+                                  <SeatIcon className="w-3.5 h-3.5" />
+                                  <span className="text-[10px] uppercase font-bold tracking-widest">
+                                    Seats
+                                  </span>
+                                </div>
+                                <div className="pt-0.5 space-y-2">
+                                  <p className="text-xs text-zinc-200 font-semibold">
+                                    {sorted.length} seats
+                                  </p>
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {previewSeats.map((seat) => (
+                                      <span
+                                        key={seat}
+                                        className="px-2 py-0.5 bg-white/5 text-[10px] font-black rounded border border-white/10"
+                                      >
+                                        {seat}
+                                      </span>
+                                    ))}
+                                    {remainingCount > 0 && (
+                                      <button
+                                        type="button"
+                                        onClick={() => setSeatDialogTarget(tx)}
+                                        className="px-2 py-0.5 bg-primary/10 text-[10px] font-black rounded border border-primary/30 text-primary cursor-pointer hover:bg-primary/20 transition-colors"
+                                      >
+                                        +{remainingCount} more
+                                      </button>
+                                    )}
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => setSeatDialogTarget(tx)}
+                                    className="text-[10px] uppercase font-black tracking-widest text-primary hover:text-primary/80 transition-colors cursor-pointer"
+                                  >
+                                    View all
+                                  </button>
+                                </div>
+                              </div>
+
+                              <div className="space-y-1">
+                                <div className="flex items-center gap-2 text-zinc-500 mb-1">
+                                  <CreditCard className="w-3.5 h-3.5" />
+                                  <span className="text-[10px] uppercase font-bold tracking-widest">
+                                    Payment
+                                  </span>
+                                </div>
+                                <p
+                                  className="text-[10px] font-mono text-zinc-500 truncate w-32"
+                                  title={
+                                    tx.stripe_payment_id ||
+                                    tx.stripe_session_id ||
+                                    "ID_NOT_AVAILABLE"
+                                  }
+                                >
+                                  {tx.stripe_payment_id ||
+                                    tx.stripe_session_id ||
+                                    "ID_NOT_AVAILABLE"}
+                                </p>
+                              </div>
+                            </div>
                           </div>
-                          <div className="flex flex-wrap gap-1.5 pt-0.5">
-                            {tx.seats.map((s: string) => (
-                              <span
-                                key={s}
-                                className="px-2 py-0.5 bg-white/5 text-[10px] font-black rounded border border-white/5"
+
+                          <div className="mt-8 flex items-center justify-between gap-4">
+                            <p className="text-sm md:text-base font-semibold text-zinc-300">
+                              Booked on{" "}
+                              {moment(tx.created_at).format("MMM D, h:mm A")}
+                            </p>
+                            <div className="flex items-center gap-3">
+                              {tx.status === BookingStatus.PENDING_PAYMENT && (
+                                <button
+                                  onClick={() => handlePayNow(tx)}
+                                  disabled={isPaying}
+                                  className="h-10 px-6 bg-primary text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:scale-105 transition-transform cursor-pointer"
+                                >
+                                  {isPaying ? "Processing..." : "Pay Now"}
+                                </button>
+                              )}
+                              {(tx.status === BookingStatus.PENDING_PAYMENT ||
+                                tx.status === BookingStatus.CONFIRMED) && (
+                                <button
+                                  onClick={() => setCancelTarget(tx)}
+                                  disabled={isCancelling}
+                                  className="h-10 px-6 bg-zinc-800 text-zinc-200 text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-zinc-700 transition-colors disabled:opacity-50 cursor-pointer"
+                                >
+                                  {isCancelling
+                                    ? "Cancelling..."
+                                    : "Cancel Booking"}
+                                </button>
+                              )}
+                              <button
+                                onClick={() =>
+                                  router.push(
+                                    `/movie-details/${tx.tmdb_movie_id}`,
+                                  )
+                                }
+                                className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-zinc-400 hover:text-white transition-colors cursor-pointer"
                               >
-                                {s}
-                              </span>
-                            ))}
+                                View Movie
+                                <ChevronRight className="w-4 h-4" />
+                              </button>
+                            </div>
                           </div>
                         </div>
-
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2 text-zinc-500 mb-1">
-                            <CreditCard className="w-3.5 h-3.5" />
-                            <span className="text-[10px] uppercase font-bold tracking-widest">
-                              Payment
-                            </span>
-                          </div>
-                          <p
-                            className="text-[10px] font-mono text-zinc-500 truncate w-32"
-                            title={
-                              tx.stripe_payment_id ||
-                              tx.stripe_session_id ||
-                              "ID_NOT_AVAILABLE"
-                            }
-                          >
-                            {tx.stripe_payment_id ||
-                              tx.stripe_session_id ||
-                              "ID_NOT_AVAILABLE"}
-                          </p>
-                        </div>
                       </div>
-                    </div>
-
-                    <div className="mt-8 flex items-center justify-between gap-4">
-                      <p className="text-sm md:text-base font-semibold text-zinc-300">
-                        ID: #{tx.id} • Booked on{" "}
-                        {moment(tx.created_at).format("MMM D, h:mm A")}
-                      </p>
-                      <div className="flex items-center gap-3">
-                        {tx.status === BookingStatus.PENDING_PAYMENT && (
-                          <button
-                            onClick={() => handlePayNow(tx)}
-                            disabled={isPaying}
-                            className="h-10 px-6 bg-primary text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:scale-105 transition-transform cursor-pointer"
-                          >
-                            {isPaying ? "Processing..." : "Pay Now"}
-                          </button>
-                        )}
-                        {(tx.status === BookingStatus.PENDING_PAYMENT ||
-                          tx.status === BookingStatus.CONFIRMED) && (
-                          <button
-                            onClick={() => setCancelTarget(tx)}
-                            disabled={isCancelling}
-                            className="h-10 px-6 bg-zinc-800 text-zinc-200 text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-zinc-700 transition-colors disabled:opacity-50 cursor-pointer"
-                          >
-                            {isCancelling ? "Cancelling..." : "Cancel Booking"}
-                          </button>
-                        )}
-                        <button
-                          onClick={() =>
-                            router.push(`/movie-details/${tx.tmdb_movie_id}`)
-                          }
-                          className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-zinc-400 hover:text-white transition-colors cursor-pointer"
-                        >
-                          View Movie
-                          <ChevronRight className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                    )
+                  }
+                </MovieDataGate>
               );
             })}
           </div>
         ) : (
-          <div className="min-h-[60vh] flex flex-col items-center justify-center text-center space-y-6">
-            <div className="w-24 h-24 bg-zinc-900/50 border border-white/5 rounded-[2.5rem] flex items-center justify-center shadow-2xl">
-              <Ticket className="w-10 h-10 text-zinc-700" />
-            </div>
-            <div className="space-y-2">
-              <h3 className="text-2xl font-black">No Bookings Yet</h3>
-              <p className="text-zinc-500 max-w-sm mx-auto font-medium">
-                Your cinematic journey hasn&apos;t started. Experience the magic
-                of movies today.
-              </p>
-            </div>
-            <button
-              onClick={() => router.push("/movies")}
-              className="mt-4 px-10 h-14 bg-white text-black font-black rounded-2xl hover:scale-105 transition-transform cursor-pointer"
-            >
-              Explore Movies
-            </button>
-          </div>
+          <EmptyBookingsState onExplore={() => router.push("/movies")} />
         )}
       </main>
 
@@ -513,6 +645,39 @@ export default function TransactionsPage() {
           </div>
         </div>
       )}
+
+      <Dialog
+        open={Boolean(seatDialogTarget)}
+        onOpenChange={(open) => {
+          if (!open) setSeatDialogTarget(null);
+        }}
+      >
+        <DialogContent className="max-w-md bg-zinc-900 border-white/10 text-white">
+          <DialogHeader>
+            <DialogTitle className="text-white">Booked Seats</DialogTitle>
+            <DialogDescription className="text-zinc-400">
+              {seatDialogTarget
+                ? `${sortSeatLabels(seatDialogTarget.seats).length} seats in this booking`
+                : "Seat list"}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-72 overflow-y-auto custom-scrollbar pr-1">
+            <div className="flex flex-wrap gap-2">
+              {(seatDialogTarget
+                ? sortSeatLabels(seatDialogTarget.seats)
+                : []
+              ).map((seat) => (
+                <span
+                  key={seat}
+                  className="px-2.5 py-1 rounded-md text-xs font-black border border-white/10 bg-white/5"
+                >
+                  {seat}
+                </span>
+              ))}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

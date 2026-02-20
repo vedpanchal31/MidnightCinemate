@@ -3,7 +3,7 @@
 import React from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { User, Settings, LogOut } from "lucide-react";
+import { User, Ticket, LogOut } from "lucide-react";
 import { RootState } from "@/store/store";
 import { AuthState } from "@/store/authSlice";
 import {
@@ -52,16 +52,13 @@ export default function ProfileIcon() {
               </div>
             </div>
 
-            <div className="grid gap-2">
-              <Link href="/profile">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="w-full flex items-center justify-center gap-2 bg-zinc-800/50 border-zinc-700 text-white hover:bg-zinc-700/50 transition-colors"
-                >
-                  <Settings className="h-4 w-4" />
-                  Profile Settings
-                </Button>
+            <div className="grid gap-1">
+              <Link
+                href="/transactions"
+                className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-zinc-300 hover:text-white hover:bg-white/5 rounded-lg transition-all group"
+              >
+                <Ticket className="h-4 w-4 text-zinc-500 group-hover:text-primary transition-colors" />
+                My Transactions
               </Link>
 
               <Button

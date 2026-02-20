@@ -43,10 +43,24 @@ export async function POST(req: NextRequest) {
     // Use pre-created pending bookings if supplied.
     if (normalizedBookingIds.length > 0) {
       const pendingRows = await db.query(
-        `SELECT id, user_id, tmdb_movie_id, show_date, show_time, timeslot_id, seat_id, price, status
-         FROM "MovieBooking"
-         WHERE id = ANY($1)
-         ORDER BY id ASC`,
+        `SELECT
+          mb.id,
+          mb.user_id,
+          mb.tmdb_movie_id,
+          mb.show_date,
+          mb.show_time,
+          mb.timeslot_id,
+          mb.price,
+          mb.status,
+          COALESCE(
+            ARRAY_AGG(bs.seat_id ORDER BY bs.seat_id) FILTER (WHERE bs.seat_id IS NOT NULL),
+            '{}'
+          ) AS seat_ids
+         FROM "MovieBooking" mb
+         LEFT JOIN "BookingSeat" bs ON bs.booking_id = mb.id
+         WHERE mb.id = ANY($1)
+         GROUP BY mb.id
+         ORDER BY mb.id ASC`,
         [normalizedBookingIds],
       );
 
@@ -133,7 +147,15 @@ export async function POST(req: NextRequest) {
       effectiveShowDate = String(first.show_date).slice(0, 10);
       effectiveShowTime = String(first.show_time);
       effectiveTimeslotId = String(first.timeslot_id);
-      effectiveSeatIds = pendingRows.rows.map((row) => String(row.seat_id));
+      effectiveSeatIds = Array.from(
+        new Set(
+          pendingRows.rows.flatMap((row) =>
+            Array.isArray(row.seat_ids)
+              ? row.seat_ids.map((seat: unknown) => String(seat))
+              : [],
+          ),
+        ),
+      );
       effectiveAmount = pendingRows.rows.reduce(
         (sum, row) => sum + Number(row.price || 0),
         0,

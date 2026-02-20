@@ -1,19 +1,16 @@
-import { NextResponse } from 'next/server';
-import { tmdbService } from '@/lib/tmdb';
+import { NextResponse } from "next/server";
+import { tmdbService } from "@/lib/tmdb";
 
 export async function GET(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     const { id } = await params;
     const movieId = parseInt(id);
 
     if (isNaN(movieId)) {
-      return NextResponse.json(
-        { error: 'Invalid movie ID' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Invalid movie ID" }, { status: 400 });
     }
 
     const movie = await tmdbService.getMovieDetails(movieId);
@@ -27,7 +24,7 @@ export async function GET(
       backdrop_url: tmdbService.getBackdropUrl(movie.backdrop_path),
       release_date: movie.release_date,
       vote_average: movie.vote_average,
-      genres: movie.genres?.map(g => g.name) || [],
+      genres: movie.genres?.map((g) => g.name) || [],
       runtime: movie.runtime,
       tagline: movie.tagline,
       status: movie.status,
@@ -35,20 +32,21 @@ export async function GET(
 
     return NextResponse.json(transformedMovie);
   } catch (error) {
-    console.error('Error fetching movie details:', error);
-    // Return fallback movie data instead of 500
-    return NextResponse.json({
-      id: parseInt((await params).id),
-      title: "Movie Title Unavailable",
-      overview: "Unable to load movie details. Please try again later.",
-      poster_url: null,
-      backdrop_url: null,
-      release_date: new Date().toISOString().split('T')[0],
-      vote_average: 0,
-      genres: ["Drama"],
-      runtime: 120,
-      tagline: "",
-      status: "Released",
-    });
+    console.error("Error fetching movie details:", error);
+    const message =
+      error instanceof Error ? error.message : "Failed to fetch movie details";
+    const statusMatch =
+      error instanceof Error
+        ? error.message.match(/TMDB API Error:\s*(\d{3})/)
+        : null;
+    const statusCode = statusMatch ? Number(statusMatch[1]) : 502;
+
+    return NextResponse.json(
+      {
+        error: "Failed to fetch movie details",
+        details: message,
+      },
+      { status: statusCode },
+    );
   }
 }

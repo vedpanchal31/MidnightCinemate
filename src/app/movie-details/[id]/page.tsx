@@ -126,10 +126,22 @@ export default function MovieDetailsPage({
 
   const getAvailabilityStatus = (availableSeats: number) => {
     if (availableSeats === 0)
-      return { text: "Sold Out", color: "text-red-500" };
-    if (availableSeats <= 10)
-      return { text: "Few Left", color: "text-orange-500" };
-    return { text: "Available", color: "text-green-500" };
+      return {
+        text: "Sold Out",
+        color: "text-red-500",
+        barColor: "bg-red-500",
+      };
+    if (availableSeats <= 40)
+      return {
+        text: "Few Left",
+        color: "text-orange-500",
+        barColor: "bg-orange-500",
+      };
+    return {
+      text: "Available",
+      color: "text-green-500",
+      barColor: "bg-green-500",
+    };
   };
 
   return (
@@ -139,7 +151,7 @@ export default function MovieDetailsPage({
         <div className="max-w-6xl mx-auto flex items-center gap-4">
           <button
             onClick={() => router.back()}
-            className="p-2 hover:bg-white/10 rounded-full transition-colors"
+            className="p-2 hover:bg-white/10 rounded-full transition-colors cursor-pointer"
           >
             <ChevronLeft className="w-6 h-6" />
           </button>
@@ -290,7 +302,7 @@ export default function MovieDetailsPage({
                       key={video.id}
                       onClick={() => setSelectedVideoUrl(video.url)}
                       className={cn(
-                        "shrink-0 w-40 h-28 rounded-lg border transition-all duration-300 overflow-hidden group",
+                        "shrink-0 w-40 h-28 rounded-lg border transition-all duration-300 overflow-hidden group cursor-pointer",
                         selectedVideoUrl === video.url
                           ? "border-primary bg-primary/10"
                           : "border-zinc-700 bg-zinc-800/50 hover:border-primary/50",
@@ -490,6 +502,10 @@ export default function MovieDetailsPage({
                         slot.available_seats,
                       );
                       const isAvailable = slot.available_seats > 0;
+                      const availabilityPercent =
+                        slot.total_seats > 0
+                          ? (slot.available_seats / slot.total_seats) * 100
+                          : 0;
 
                       return (
                         <button
@@ -528,9 +544,9 @@ export default function MovieDetailsPage({
 
                           <div className="w-full h-1 bg-zinc-700 rounded-full overflow-hidden mt-2">
                             <div
-                              className="h-full bg-gradient-to-r from-primary to-red-600"
+                              className={cn("h-full", availability.barColor)}
                               style={{
-                                width: `${(slot.available_seats / slot.total_seats) * 100}%`,
+                                width: `${availabilityPercent}%`,
                               }}
                             />
                           </div>

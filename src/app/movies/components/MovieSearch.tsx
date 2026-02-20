@@ -114,10 +114,6 @@ export default function MovieSearch() {
                         alt={movie.title}
                         className="object-cover w-full h-full group-hover:scale-105 transition-transform duration-500"
                         onError={(e) => {
-                          console.log(
-                            "Image failed to load:",
-                            movie.poster_url,
-                          );
                           const target = e.target as HTMLImageElement;
                           target.style.display = "none";
                           const parent = target.parentElement;

@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getBookingsByMovieAndTime } from "@/lib/database/db-service";
-import { BookingStatus } from "@/lib/database/schema";
 
 export async function GET(request: NextRequest) {
   try {
