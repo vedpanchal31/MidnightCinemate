@@ -12,6 +12,7 @@
     "format:check": "prettier --check .",
     "db:setup": "npx tsx scripts/setup-db.ts",
     "db:test": "npx tsx scripts/test-db.ts",
+    "cron:expire-bookings": "npx tsx scripts/expire-pending-bookings.ts",
     "tmdb:test": "npx tsx scripts/test-tmdb.ts",
     "prepare": "husky"
   },

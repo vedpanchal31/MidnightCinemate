@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   createTimeSlot,
+  ensureTimeSlotInfrastructure,
+  ensureTimeSlotsForMovie,
   getAllTimeSlots,
   getTimeSlotsByMovie,
+  logTimeSlotApiActivity,
 } from "@/lib/database/db-service";
 import { CreateTimeSlotRequest, TimeSlotQuery } from "@/lib/database/schema";
 
@@ -24,11 +27,32 @@ export async function GET(request: NextRequest) {
         );
       }
 
+      await ensureTimeSlotInfrastructure();
+      await ensureTimeSlotsForMovie(
+        movieId,
+        date_from || undefined,
+        date_to || undefined,
+      );
+
       const timeSlots = await getTimeSlotsByMovie(
         movieId,
         date_from || undefined,
         date_to || undefined,
       );
+
+      await logTimeSlotApiActivity({
+        tmdb_movie_id: movieId,
+        date_from: date_from || undefined,
+        date_to: date_to || undefined,
+        request_payload: {
+          tmdb_movie_id: movieId,
+          date_from,
+          date_to,
+          screen_type,
+        },
+        response_count: timeSlots.length,
+        status: "success",
+      });
       return NextResponse.json({
         success: true,
         message: "Time slots retrieved successfully",
@@ -51,6 +75,23 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     console.error("Error fetching time slots:", error);
+    const { searchParams } = new URL(request.url);
+    const rawMovieId = searchParams.get("tmdb_movie_id");
+    const parsedMovieId = rawMovieId ? parseInt(rawMovieId, 10) : NaN;
+    await ensureTimeSlotInfrastructure();
+    await logTimeSlotApiActivity({
+      tmdb_movie_id: Number.isNaN(parsedMovieId) ? undefined : parsedMovieId,
+      date_from: searchParams.get("date_from") || undefined,
+      date_to: searchParams.get("date_to") || undefined,
+      request_payload: {
+        tmdb_movie_id: searchParams.get("tmdb_movie_id"),
+        date_from: searchParams.get("date_from"),
+        date_to: searchParams.get("date_to"),
+        screen_type: searchParams.get("screen_type"),
+      },
+      status: "error",
+    });
+
     return NextResponse.json(
       { success: false, message: "Internal server error" },
       { status: 500 },

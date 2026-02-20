@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getBookingsByUser } from "@/lib/database/db-service";
+import {
+  expirePendingBookingsBeforeShow,
+  getBookingsByUser,
+} from "@/lib/database/db-service";
 
 export async function GET(
   request: NextRequest,
@@ -15,6 +18,7 @@ export async function GET(
       );
     }
 
+    await expirePendingBookingsBeforeShow();
     const bookings = await getBookingsByUser(id);
 
     return NextResponse.json({

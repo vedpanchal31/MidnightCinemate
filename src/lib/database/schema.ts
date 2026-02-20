@@ -126,6 +126,7 @@ export interface TimeSlot {
   show_time: string; // HH:MM format
   total_seats: number;
   available_seats: number;
+  booked_seats?: number;
   price: number;
   screen_type: "2D" | "3D" | "IMAX" | "4DX";
   is_active: boolean;

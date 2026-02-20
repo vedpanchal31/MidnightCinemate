@@ -23,6 +23,7 @@ import {
 import { cn } from "@/lib/utils";
 
 export default function TimeSlotsManagement() {
+  const [tmdbFilter, setTmdbFilter] = useState<string>("");
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [editingSlot, setEditingSlot] = useState<TimeSlot | null>(null);
   const [formData, setFormData] = useState<CreateTimeSlotRequest>({
@@ -38,7 +39,11 @@ export default function TimeSlotsManagement() {
     data: timeSlots = [],
     isLoading,
     refetch,
-  } = useGetAllTimeSlotsQuery();
+  } = useGetAllTimeSlotsQuery(
+    tmdbFilter.trim()
+      ? { tmdb_movie_id: parseInt(tmdbFilter, 10) || undefined }
+      : undefined,
+  );
   const [createTimeSlot] = useCreateTimeSlotMutation();
   const [updateTimeSlot] = useUpdateTimeSlotMutation();
   const [deleteTimeSlot] = useDeleteTimeSlotMutation();
@@ -161,6 +166,27 @@ export default function TimeSlotsManagement() {
           </button>
         </div>
 
+        <div className="mb-6 flex items-center gap-3">
+          <input
+            type="number"
+            value={tmdbFilter}
+            onChange={(e) => setTmdbFilter(e.target.value)}
+            className="w-72 px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-lg focus:outline-none focus:border-primary"
+            placeholder="Filter by TMDB Movie ID"
+          />
+          {tmdbFilter && (
+            <button
+              onClick={() => setTmdbFilter("")}
+              className="px-3 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-sm"
+            >
+              Clear
+            </button>
+          )}
+          <span className="text-sm text-zinc-400">
+            Rows: {timeSlots.length}
+          </span>
+        </div>
+
         {/* Time Slots Table */}
         <div className="bg-zinc-900/50 rounded-2xl border border-zinc-800 overflow-hidden">
           <div className="overflow-x-auto">
@@ -180,7 +206,13 @@ export default function TimeSlotsManagement() {
                     Screen
                   </th>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-zinc-300">
-                    Seats
+                    Total
+                  </th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-zinc-300">
+                    Booked
+                  </th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-zinc-300">
+                    Available
                   </th>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-zinc-300">
                     Price
@@ -229,10 +261,17 @@ export default function TimeSlotsManagement() {
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2">
                         <Users className="w-4 h-4 text-zinc-400" />
-                        <span>
-                          {slot.available_seats}/{slot.total_seats}
-                        </span>
+                        <span>{slot.total_seats}</span>
                       </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span>
+                        {slot.booked_seats ??
+                          slot.total_seats - slot.available_seats}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span>{slot.available_seats}</span>
                     </td>
                     <td className="px-6 py-4">
                       <span className="font-medium">

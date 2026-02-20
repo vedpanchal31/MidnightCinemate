@@ -205,9 +205,21 @@ export const moviesApi = createApi({
         response.data || [],
       providesTags: ["Booking"],
     }),
+    cancelBookings: builder.mutation<
+      { success: boolean; message: string; cancelled_count: number },
+      { user_id: string; booking_ids: number[] }
+    >({
+      query: (payload) => ({
+        url: "/api/bookings/cancel",
+        method: "post",
+        data: payload,
+      }),
+      invalidatesTags: ["Booking", "TimeSlot"],
+    }),
     createCheckoutSession: builder.mutation<
       { success: boolean; url: string; sessionId: string },
       CreateBookingRequest & {
+        booking_ids?: number[];
         movie_title?: string | React.ReactNode;
         user_email?: string | null;
       }
@@ -243,6 +255,7 @@ export const {
   useGetBookingsByMovieAndTimeQuery,
   useCreateBookingMutation,
   useGetUserBookingsQuery,
+  useCancelBookingsMutation,
   useCreateCheckoutSessionMutation,
   useGetBookingBySessionIdQuery,
 } = moviesApi;

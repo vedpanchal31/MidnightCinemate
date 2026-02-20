@@ -22,6 +22,7 @@ import {
   useGetUserBookingsQuery,
   useGetMovieByIdQuery,
   useCreateCheckoutSessionMutation,
+  useCancelBookingsMutation,
 } from "@/store/moviesApi";
 import { RootState } from "@/store/store";
 import { AuthState } from "@/store/authSlice";
@@ -53,6 +54,7 @@ interface GroupedBookingTransaction extends Omit<
   "seat_id" | "price"
 > {
   seats: string[];
+  bookingIds: number[];
   totalAmount: number;
   movie_title?: string;
 }
@@ -87,9 +89,9 @@ const getStatusDetails = (status: number) => {
       return {
         label: "Expired",
         icon: AlertCircle,
-        color: "text-zinc-500",
-        bg: "bg-zinc-500/10",
-        border: "border-zinc-500/20",
+        color: "text-red-300",
+        bg: "bg-red-500/20",
+        border: "border-red-500/35",
       };
     case BookingStatus.CANCELLED:
       return {
@@ -169,6 +171,10 @@ export default function TransactionsPage() {
 
   const [createCheckoutSession, { isLoading: isPaying }] =
     useCreateCheckoutSessionMutation();
+  const [cancelBookings, { isLoading: isCancelling }] =
+    useCancelBookingsMutation();
+  const [cancelTarget, setCancelTarget] =
+    React.useState<GroupedBookingTransaction | null>(null);
 
   const handlePayNow = async (tx: GroupedBookingTransaction) => {
     try {
@@ -182,6 +188,7 @@ export default function TransactionsPage() {
         timeslot_id: tx.timeslot_id,
         seat_ids: tx.seats,
         amount: tx.totalAmount,
+        booking_ids: tx.bookingIds,
       }).unwrap();
 
       if (result.url) {
@@ -190,6 +197,22 @@ export default function TransactionsPage() {
     } catch (error) {
       console.error("Payment failed:", error);
       toast.error("Failed to initiate payment. Please try again.");
+    }
+  };
+
+  const handleCancelBooking = async (tx: GroupedBookingTransaction) => {
+    if (!user?.id || tx.bookingIds.length === 0) return;
+    try {
+      await cancelBookings({
+        user_id: user.id,
+        booking_ids: tx.bookingIds,
+      }).unwrap();
+      toast.success("Booking cancelled");
+      setCancelTarget(null);
+      refetch();
+    } catch (error) {
+      console.error("Cancel booking failed:", error);
+      toast.error("Failed to cancel booking");
     }
   };
 
@@ -206,7 +229,7 @@ export default function TransactionsPage() {
           </p>
           <button
             onClick={() => router.push("/login")}
-            className="w-full h-14 bg-primary text-white font-black rounded-2xl shadow-lg shadow-primary/20 hover:scale-105 transition-transform"
+            className="w-full h-14 bg-primary text-white font-black rounded-2xl shadow-lg shadow-primary/20 hover:scale-105 transition-transform cursor-pointer"
           >
             Sign In Now
           </button>
@@ -218,16 +241,28 @@ export default function TransactionsPage() {
   // Group bookings by session or just list them
   const groupedBookings = (bookings as any[]).reduce(
     (acc: Record<string, GroupedBookingTransaction>, booking: any) => {
-      const key = booking.stripe_session_id || booking.id.toString();
+      const pendingGroupKey = [
+        booking.user_id || "guest",
+        booking.tmdb_movie_id,
+        booking.show_date,
+        booking.show_time,
+        booking.timeslot_id,
+        booking.status,
+        // rows created in one insert share same timestamp in this flow
+        booking.created_at,
+      ].join("|");
+      const key = booking.stripe_session_id || pendingGroupKey;
       if (!acc[key]) {
         const { seat_id, price, ...rest } = booking;
         acc[key] = {
           ...rest,
           seats: [seat_id],
+          bookingIds: [booking.id],
           totalAmount: Number(price),
         };
       } else {
         acc[key].seats.push(booking.seat_id);
+        acc[key].bookingIds.push(booking.id);
         acc[key].totalAmount += Number(booking.price);
       }
       return acc;
@@ -385,7 +420,7 @@ export default function TransactionsPage() {
                     </div>
 
                     <div className="mt-8 flex items-center justify-between gap-4">
-                      <p className="text-[10px] font-bold text-zinc-600 italic">
+                      <p className="text-sm md:text-base font-semibold text-zinc-300">
                         ID: #{tx.id} • Booked on{" "}
                         {moment(tx.created_at).format("MMM D, h:mm A")}
                       </p>
@@ -394,16 +429,26 @@ export default function TransactionsPage() {
                           <button
                             onClick={() => handlePayNow(tx)}
                             disabled={isPaying}
-                            className="h-10 px-6 bg-primary text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:scale-105 transition-transform"
+                            className="h-10 px-6 bg-primary text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:scale-105 transition-transform cursor-pointer"
                           >
                             {isPaying ? "Processing..." : "Pay Now"}
+                          </button>
+                        )}
+                        {(tx.status === BookingStatus.PENDING_PAYMENT ||
+                          tx.status === BookingStatus.CONFIRMED) && (
+                          <button
+                            onClick={() => setCancelTarget(tx)}
+                            disabled={isCancelling}
+                            className="h-10 px-6 bg-zinc-800 text-zinc-200 text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-zinc-700 transition-colors disabled:opacity-50 cursor-pointer"
+                          >
+                            {isCancelling ? "Cancelling..." : "Cancel Booking"}
                           </button>
                         )}
                         <button
                           onClick={() =>
                             router.push(`/movie-details/${tx.tmdb_movie_id}`)
                           }
-                          className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-zinc-400 hover:text-white transition-colors"
+                          className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-zinc-400 hover:text-white transition-colors cursor-pointer"
                         >
                           View Movie
                           <ChevronRight className="w-4 h-4" />
@@ -429,13 +474,45 @@ export default function TransactionsPage() {
             </div>
             <button
               onClick={() => router.push("/movies")}
-              className="mt-4 px-10 h-14 bg-white text-black font-black rounded-2xl hover:scale-105 transition-transform"
+              className="mt-4 px-10 h-14 bg-white text-black font-black rounded-2xl hover:scale-105 transition-transform cursor-pointer"
             >
               Explore Movies
             </button>
           </div>
         )}
       </main>
+
+      {cancelTarget && (
+        <div className="fixed inset-0 z-[70] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-md rounded-2xl border border-white/10 bg-zinc-900 p-6 space-y-5">
+            <div className="space-y-2">
+              <h3 className="text-xl font-black text-white">Cancel Booking?</h3>
+              <p className="text-sm text-zinc-400">
+                This will cancel seats{" "}
+                <span className="text-zinc-200 font-semibold">
+                  {cancelTarget.seats.join(", ")}
+                </span>
+                . You can book again if seats are available.
+              </p>
+            </div>
+            <div className="flex items-center justify-end gap-3">
+              <button
+                onClick={() => setCancelTarget(null)}
+                className="h-10 px-4 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-sm font-semibold cursor-pointer"
+              >
+                Keep Booking
+              </button>
+              <button
+                onClick={() => handleCancelBooking(cancelTarget)}
+                disabled={isCancelling}
+                className="h-10 px-4 rounded-lg bg-red-600 hover:bg-red-500 text-white text-sm font-semibold disabled:opacity-50 cursor-pointer"
+              >
+                {isCancelling ? "Cancelling..." : "Yes, Cancel"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

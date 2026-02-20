@@ -522,6 +522,9 @@ export default function MovieDetailsPage({
                           <p className="text-xs text-zinc-400">
                             {slot.available_seats} seats
                           </p>
+                          <p className="text-xs text-zinc-500 font-medium">
+                            {slot.screen_type}
+                          </p>
 
                           <div className="w-full h-1 bg-zinc-700 rounded-full overflow-hidden mt-2">
                             <div

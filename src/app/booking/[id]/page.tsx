@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
 import {
   useGetMovieByIdQuery,
   useGetBookingsByMovieAndTimeQuery,
-  useCreateCheckoutSessionMutation,
+  useCreateBookingMutation,
 } from "@/store/moviesApi";
 import { ShimmerText } from "@/components/ui/shimmer";
 import UnauthorizedBookingModal from "@/components/UnauthorizedBookingModal";
@@ -18,6 +18,7 @@ import { RootState } from "@/store/store";
 import { AuthState } from "@/store/authSlice";
 import { formatDate, convertDateTimeToUTC } from "@/helpers/HelperFunction";
 import toast from "react-hot-toast";
+import moment from "moment";
 
 interface Seat {
   id: string;
@@ -120,8 +121,7 @@ export default function BookingPage({
     { skip: !movieId || !utcDate || !utcTime },
   );
 
-  const [createCheckoutSession, { isLoading: isBooking }] =
-    useCreateCheckoutSessionMutation();
+  const [createBooking, { isLoading: isBooking }] = useCreateBookingMutation();
 
   const bookedSeatIds = remoteBookings.map((b) => b.seat_id);
 
@@ -146,7 +146,7 @@ export default function BookingPage({
     : "Today";
 
   const formattedTime = timeParam
-    ? formatDate(`2000-01-01T${timeParam}`, "hh:mm A")
+    ? moment(timeParam, ["HH:mm", "HH:mm:ss"]).format("hh:mm A")
     : "09:30 PM";
 
   const showTime = `${formattedDate}, ${formattedTime}`;
@@ -184,7 +184,7 @@ export default function BookingPage({
         <div className="max-w-5xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-4">
             <Link
-              href="/movies"
+              href={movieId ? `/movie-details/${movieId}` : "/movies"}
               className="p-2 hover:bg-white/10 rounded-full transition-colors"
             >
               <ChevronLeft className="w-6 h-6" />
@@ -396,40 +396,37 @@ export default function BookingPage({
               }
 
               try {
-                const utcBookingString = convertDateTimeToUTC(
-                  dateParam!,
-                  timeParam!,
-                );
-                const utcBookingDate = utcBookingString.split("T")[0];
-                const utcBookingTime = utcBookingString
-                  .split("T")[1]
-                  .replace("Z", "");
-
-                const response = await createCheckoutSession({
+                const response = await createBooking({
                   user_id: user?.id,
-                  user_email: user?.email,
                   tmdb_movie_id: movieId!,
-                  movie_title: movie?.title,
-                  show_date: utcBookingDate,
-                  show_time: utcBookingTime,
+                  show_date: dateParam!,
+                  show_time: timeParam!,
                   timeslot_id: slotId!,
                   seat_ids: selectedSeats,
                   amount: totalPrice,
                 }).unwrap();
 
-                if (response.url) {
-                  router.push(response.url);
-                } else {
-                  toast.error("Failed to initiate checkout");
-                }
+                const bookingIds = response
+                  .map((booking) => booking.id)
+                  .join(",");
+                const query = new URLSearchParams({
+                  movieId: String(movieId!),
+                  date: dateParam!,
+                  time: timeParam!,
+                  slotId: slotId!,
+                  seats: selectedSeats.join(","),
+                  amount: String(totalPrice),
+                  bookingIds,
+                });
+                router.push(`/booking/summary?${query.toString()}`);
               } catch (err) {
-                console.error("Checkout failed:", err);
-                toast.error("Something went wrong with checkout");
+                console.error("Seat confirmation failed:", err);
+                toast.error("Unable to confirm seats");
               }
             }}
           >
             <span className="flex items-center gap-3">
-              {isBooking ? "Processing..." : "Confirm Booking"}
+              {isBooking ? "Processing..." : "Confirm Seats"}
               <div className="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center group-hover:bg-white/40 transition-colors">
                 <ChevronLeft className="w-5 h-5 rotate-180" />
               </div>

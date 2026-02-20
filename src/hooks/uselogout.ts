@@ -5,7 +5,6 @@ import { RootState } from "@/store/store";
 import { useRouter } from "next/navigation";
 import { logout } from "@/store/authSlice";
 
-
 const useLogout = () => {
   const dispatch = useDispatch();
   const router = useRouter();
@@ -14,20 +13,23 @@ const useLogout = () => {
   // Safely accessing token from auth state
   const token = useSelector((state: RootState) => state.auth.token);
 
-  const handleLogout = (toastMessage?: string, toastType?: "error" | "warning") => {
+  const handleLogout = (
+    toastMessage?: string,
+    toastType?: "error" | "warning",
+  ) => {
     dispatch(logout());
     if (token) {
       if (toastType === "error") {
         toast.error(t(toastMessage ?? "COMMON.LOGOUT.ERROR"));
       } else if (toastType === "warning") {
         toast(t(toastMessage ?? "COMMON.LOGOUT.WARNING"), {
-          icon: '⚠️',
+          icon: "⚠️",
         });
       } else {
-        toast.success(t(toastMessage ?? "COMMON.LOGOUT.SUCCESSFUL"));
+        toast.success(t(toastMessage ?? t("COMMON.LOGOUT.SUCCESSFUL")));
       }
     }
-    
+
     router.push("/login");
   };
 

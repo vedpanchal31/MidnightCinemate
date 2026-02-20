@@ -1,6 +1,11 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import Stripe from "stripe";
+import { updateBookingStatusBySession } from "@/lib/database/db-service";
+import { BookingStatus } from "@/lib/database/schema";
+
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 
 export async function GET(
   request: NextRequest,
@@ -16,24 +21,42 @@ export async function GET(
       );
     }
 
-    // Query bookings by stripe_session_id
+    // Fallback sync in case webhook was missed (common in local dev).
+    // This ensures paid sessions are reflected as CONFIRMED in history.
+    try {
+      const session = await stripe.checkout.sessions.retrieve(session_id);
+      if (session.payment_status === "paid") {
+        await updateBookingStatusBySession(
+          session_id,
+          BookingStatus.CONFIRMED,
+          session.payment_intent ? String(session.payment_intent) : undefined,
+        );
+      } else if (session.status === "expired") {
+        await updateBookingStatusBySession(session_id, BookingStatus.EXPIRED);
+      }
+    } catch (syncError) {
+      console.warn("Stripe sync skipped for session:", session_id, syncError);
+    }
+
+    // Aggregate booking rows by stripe_session_id into a single payload
     const result = await db.query(
       `
       SELECT 
-        mb.id,
+        MIN(mb.id) AS id,
         mb.user_id,
         mb.tmdb_movie_id,
         mb.show_date,
         mb.show_time,
-        mb.seat_ids,
-        mb.amount,
-        mb.status,
-        mb.created_at,
-        m.title as movie_title
+        mb.timeslot_id,
+        ARRAY_AGG(mb.seat_id ORDER BY mb.seat_id) AS seat_ids,
+        SUM(mb.price)::numeric(10,2) AS amount,
+        MIN(mb.status) AS status,
+        MIN(mb.created_at) AS created_at
       FROM "MovieBooking" mb
-      LEFT JOIN movies m ON mb.tmdb_movie_id = m.id
       WHERE mb.stripe_session_id = $1
-      ORDER BY mb.created_at DESC
+      GROUP BY mb.user_id, mb.tmdb_movie_id, mb.show_date, mb.show_time, mb.timeslot_id
+      ORDER BY MIN(mb.created_at) DESC
+      LIMIT 1
     `,
       [session_id],
     );

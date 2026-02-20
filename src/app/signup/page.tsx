@@ -230,7 +230,7 @@ export default function SignUpPage() {
               validationSchema={signupSchema}
               onSubmit={handleSubmit}
             >
-              {({ isSubmitting, errors, touched, values }) => (
+              {({ isSubmitting, errors, touched }) => (
                 <Form className="space-y-4 lg:space-y-5">
                   <FormikInput
                     name="name"
@@ -302,7 +302,9 @@ export default function SignUpPage() {
                       }) => (
                         <Checkbox
                           id="terms"
+                          size="md"
                           checked={field.value}
+                          className="mt-0.5 shrink-0 data-[state=checked]:shadow-red-500/45"
                           onCheckedChange={(checked) => {
                             form.setFieldValue("terms", checked === true);
                           }}

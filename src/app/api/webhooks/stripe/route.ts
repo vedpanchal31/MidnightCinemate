@@ -58,12 +58,23 @@ export async function POST(req: NextRequest) {
           // The previous code did it here.
 
           const metadata = session.metadata;
-          if (metadata && metadata.timeslot_id && metadata.seat_ids) {
+          if (
+            metadata &&
+            metadata.timeslot_id &&
+            metadata.seat_ids &&
+            metadata.tmdb_movie_id
+          ) {
             const seats = metadata.seat_ids.split(",");
-            await db.query(
-              'UPDATE "Timeslot" SET available_seats = available_seats - $1 WHERE id = $2',
-              [seats.length, metadata.timeslot_id],
-            );
+            const tmdbMovieId = parseInt(metadata.tmdb_movie_id, 10);
+            if (!Number.isNaN(tmdbMovieId)) {
+              await db.query(
+                `UPDATE "Timeslot"
+                 SET available_seats = GREATEST(available_seats - $1, 0)
+                 WHERE id = $2
+                   AND tmdb_movie_id = $3`,
+                [seats.length, metadata.timeslot_id, tmdbMovieId],
+              );
+            }
           }
 
           console.log(`Booking confirmed for session ${session.id}`);
@@ -74,7 +85,6 @@ export async function POST(req: NextRequest) {
       await updateBookingStatusBySession(session.id, BookingStatus.EXPIRED);
       console.log(`Booking expired for session ${session.id}`);
     } else if (event.type === "payment_intent.payment_failed") {
-      const intent = event.data.object as Stripe.PaymentIntent;
       // Note: We'd need a way to map intent to session if we want to update by session,
       // or we can just let expired handle it if we don't have the mapping.
     }
@@ -88,11 +98,3 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({ received: true });
 }
-
-// Next.js config to disable body parsing for webhooks
-export const config = {
-  api: {
-    bodyParser: false,
-  },
-};
-Maryland;
