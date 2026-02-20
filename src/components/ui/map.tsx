@@ -115,11 +115,7 @@ const Map = forwardRef<MapRef, MapProps>(function Map(
     if (!containerRef.current) return;
     setInitError(null);
 
-    const supportsWebGL =
-      typeof window !== "undefined" &&
-      (typeof MapLibreGL.supported !== "function" ||
-        MapLibreGL.supported({ failIfMajorPerformanceCaveat: false })) &&
-      canCreateWebGLContext();
+    const supportsWebGL = canCreateWebGLContext();
     if (!supportsWebGL) {
       setInitError("WebGL is not available in this browser/environment.");
       return;
