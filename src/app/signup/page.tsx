@@ -31,7 +31,6 @@ import { FormikInput } from "@/components/FormikInput";
 
 import { useSignUpMutation } from "@/store/authApi";
 import { handleError } from "@/helpers/HelperFunction";
-import { ThemeToggle } from "@/components/ThemeToggle";
 
 export default function SignUpPage() {
   const router = useRouter();
@@ -94,7 +93,7 @@ export default function SignUpPage() {
   };
 
   return (
-    <div className="min-h-screen flex bg-background text-foreground overflow-hidden">
+    <div className="min-h-screen flex bg-black overflow-hidden">
       {/* Left Side - Hero Section */}
       <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden">
         {/* Background with gradient overlay */}
@@ -188,7 +187,7 @@ export default function SignUpPage() {
       </div>
 
       {/* Right Side - Signup Form */}
-      <div className="w-full lg:w-1/2 flex items-center justify-center p-6 lg:p-8 bg-gradient-to-br from-background via-card to-background relative overflow-hidden">
+      <div className="w-full lg:w-1/2 flex items-center justify-center p-6 lg:p-8 bg-gradient-to-br from-zinc-900 via-zinc-800 to-zinc-900 relative overflow-hidden">
         {/* Background decorative elements */}
         <div className="absolute inset-0">
           <div className="absolute top-0 right-0 w-96 h-96 bg-primary/20 rounded-full blur-3xl animate-pulse" />
@@ -206,24 +205,22 @@ export default function SignUpPage() {
 
         <div className="w-full max-w-sm lg:max-w-md relative z-10">
           {/* Mobile logo */}
-          <div className="lg:hidden flex items-center justify-between gap-3 mb-6 group">
-            <Link href="/" className="flex items-center justify-center gap-3">
-              <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center shadow-lg shadow-red-900/50 group-hover:scale-105 transition-transform">
-                <Film className="w-5 h-5 text-white" />
-              </div>
-              <span className="text-xl font-bold text-foreground">
-                Cinemate
-              </span>
-            </Link>
-            <ThemeToggle />
-          </div>
+          <Link
+            href="/"
+            className="lg:hidden flex items-center justify-center gap-3 mb-6 group"
+          >
+            <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center shadow-lg shadow-red-900/50 group-hover:scale-105 transition-transform">
+              <Film className="w-5 h-5 text-white" />
+            </div>
+            <span className="text-xl font-bold text-white">Cinemate</span>
+          </Link>
 
-          <div className="bg-card/80 border border-border/70 backdrop-blur-2xl shadow-2xl rounded-2xl p-6 lg:p-8">
+          <div className="bg-zinc-900/60 border border-zinc-800/50 backdrop-blur-2xl shadow-2xl rounded-2xl p-6 lg:p-8">
             <div className="text-center space-y-3 mb-6 lg:mb-8">
-              <h2 className="text-xl lg:text-2xl font-bold text-foreground">
+              <h2 className="text-xl lg:text-2xl font-bold text-white">
                 Create Account
               </h2>
-              <p className="text-muted-foreground text-sm lg:text-base">
+              <p className="text-zinc-400 text-sm lg:text-base">
                 Join us and start your cinema journey
               </p>
             </div>
@@ -319,7 +316,7 @@ export default function SignUpPage() {
                     </ErrorMessage>
                     <Label
                       htmlFor="terms"
-                      className="text-xs text-muted-foreground leading-relaxed"
+                      className="text-xs text-zinc-400 leading-relaxed"
                     >
                       I agree to the{" "}
                       <Link
