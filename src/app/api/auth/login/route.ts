@@ -47,7 +47,6 @@ export async function POST(request: Request) {
     // Find user
     const user = await findUserByEmail(body.email);
     if (!user) {
-      console.log("Login failed: User not found for email:", body.email);
       return NextResponse.json<ErrorResponse>(
         {
           success: false,
@@ -69,15 +68,7 @@ export async function POST(request: Request) {
     }
 
     // Verify password
-    console.log("Verifying password for user:", user.email);
-    console.log(
-      "Stored hash:",
-      user.password ? user.password.substring(0, 10) + "..." : "null",
-    );
-    console.log("Input password length:", body.password.length);
-
     const isPasswordValid = await bcrypt.compare(body.password, user.password);
-    console.log("Password valid:", isPasswordValid);
 
     if (!isPasswordValid) {
       return NextResponse.json<ErrorResponse>(

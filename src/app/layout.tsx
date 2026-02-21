@@ -2,7 +2,9 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import StoreProvider from "@/store/StoreProvider";
-import { Toaster } from "react-hot-toast";
+import GlobalToaster from "@/components/GlobalToaster";
+import { ThemeProvider } from "@/contexts/ThemeContext";
+import AppContent from "@/components/AppContent";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -17,6 +19,31 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Cinemate - Premium Theater Booking",
   description: "Book movies in style. Real-time availability, midnight theme.",
+  icons: {
+    icon: "/Cinemate_logo_bg.png",
+    shortcut: "/Cinemate_logo_bg.png",
+    apple: "/Cinemate_logo_bg.png",
+  },
+  openGraph: {
+    title: "Cinemate - Premium Theater Booking",
+    description:
+      "Book movies in style. Real-time availability, midnight theme.",
+    images: [
+      {
+        url: "/Cinemate_logo_bg.png",
+        width: 1200,
+        height: 630,
+        alt: "Cinemate",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Cinemate - Premium Theater Booking",
+    description:
+      "Book movies in style. Real-time availability, midnight theme.",
+    images: ["/Cinemate_logo_bg.png"],
+  },
 };
 
 export default function RootLayout({
@@ -30,40 +57,12 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
         suppressHydrationWarning
       >
-        <StoreProvider>{children}</StoreProvider>
-        <Toaster
-          position="top-right"
-          toastOptions={{
-            duration: 4000,
-            style: {
-              background: "#1f1f1f",
-              color: "#fff",
-              border: "1px solid #333",
-              borderRadius: "8px",
-              fontSize: "14px",
-            },
-            success: {
-              duration: 3000,
-              iconTheme: {
-                primary: "#10b981",
-                secondary: "#fff",
-              },
-            },
-            error: {
-              duration: 5000,
-              iconTheme: {
-                primary: "#ef4444",
-                secondary: "#fff",
-              },
-            },
-            loading: {
-              iconTheme: {
-                primary: "#3b82f6",
-                secondary: "#fff",
-              },
-            },
-          }}
-        />
+        <StoreProvider>
+          <ThemeProvider>
+            <AppContent>{children}</AppContent>
+            <GlobalToaster />
+          </ThemeProvider>
+        </StoreProvider>
       </body>
     </html>
   );

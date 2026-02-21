@@ -65,14 +65,39 @@ const DefaultLoader = () => (
   </div>
 );
 
+function canCreateWebGLContext() {
+  if (typeof window === "undefined") return false;
+
+  try {
+    const canvas = document.createElement("canvas");
+    const contextAttributes = {
+      failIfMajorPerformanceCaveat: false,
+      powerPreference: "high-performance" as WebGLPowerPreference,
+      antialias: false,
+      preserveDrawingBuffer: false,
+    };
+
+    const gl2 = canvas.getContext("webgl2", contextAttributes);
+    const gl =
+      gl2 ??
+      canvas.getContext("webgl", contextAttributes) ??
+      canvas.getContext("experimental-webgl", contextAttributes);
+
+    return Boolean(gl);
+  } catch {
+    return false;
+  }
+}
+
 const Map = forwardRef<MapRef, MapProps>(function Map(
   { children, styles, ...props },
-  ref
+  ref,
 ) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [mapInstance, setMapInstance] = useState<MapLibreGL.Map | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
   const [isStyleLoaded, setIsStyleLoaded] = useState(false);
+  const [initError, setInitError] = useState<string | null>(null);
   const { resolvedTheme } = useTheme();
   const currentStyleRef = useRef<MapStyleOption | null>(null);
 
@@ -81,38 +106,75 @@ const Map = forwardRef<MapRef, MapProps>(function Map(
       dark: styles?.dark ?? defaultStyles.dark,
       light: styles?.light ?? defaultStyles.light,
     }),
-    [styles]
+    [styles],
   );
 
   useImperativeHandle(ref, () => mapInstance as MapLibreGL.Map, [mapInstance]);
 
   useEffect(() => {
     if (!containerRef.current) return;
+    setInitError(null);
+
+    const supportsWebGL = canCreateWebGLContext();
+    if (!supportsWebGL) {
+      setInitError("WebGL is not available in this browser/environment.");
+      return;
+    }
 
     const initialStyle =
       resolvedTheme === "dark" ? mapStyles.dark : mapStyles.light;
     currentStyleRef.current = initialStyle;
 
-    const map = new MapLibreGL.Map({
-      container: containerRef.current,
-      style: initialStyle,
-      renderWorldCopies: false,
-      attributionControl: {
-        compact: true,
-      },
-      ...props,
-    });
+    let map: MapLibreGL.Map;
+    try {
+      map = new MapLibreGL.Map({
+        container: containerRef.current,
+        style: initialStyle,
+        renderWorldCopies: false,
+        attributionControl: {
+          compact: true,
+        },
+        ...props,
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to initialize map.";
+      setInitError(message);
+      return;
+    }
 
     const styleDataHandler = () => setIsStyleLoaded(true);
     const loadHandler = () => setIsLoaded(true);
+    const canvas = map.getCanvas();
+    const contextCreationErrorHandler = (event: Event) => {
+      event.preventDefault();
+      setInitError("Failed to initialize WebGL in this environment.");
+    };
+    const errorHandler = (event: { type?: string; error?: Error }) => {
+      if (event.type === "webglcontextcreationerror") {
+        const message =
+          event.error?.message || "Failed to create WebGL context.";
+        setInitError(message);
+      }
+    };
 
     map.on("load", loadHandler);
     map.on("styledata", styleDataHandler);
+    map.on("error", errorHandler);
+    canvas.addEventListener(
+      "webglcontextcreationerror",
+      contextCreationErrorHandler,
+    );
     setMapInstance(map);
 
     return () => {
       map.off("load", loadHandler);
       map.off("styledata", styleDataHandler);
+      map.off("error", errorHandler);
+      canvas.removeEventListener(
+        "webglcontextcreationerror",
+        contextCreationErrorHandler,
+      );
       map.remove();
       setIsLoaded(false);
       setIsStyleLoaded(false);
@@ -139,22 +201,29 @@ const Map = forwardRef<MapRef, MapProps>(function Map(
     return () => cancelAnimationFrame(frameId);
   }, [mapInstance, resolvedTheme, mapStyles]);
 
-  const isLoading = !isLoaded || !isStyleLoaded;
+  const isLoading = !initError && (!isLoaded || !isStyleLoaded);
 
   const contextValue = useMemo(
     () => ({
       map: mapInstance,
       isLoaded: isLoaded && isStyleLoaded,
     }),
-    [mapInstance, isLoaded, isStyleLoaded]
+    [mapInstance, isLoaded, isStyleLoaded],
   );
 
   return (
     <MapContext.Provider value={contextValue}>
       <div ref={containerRef} className="relative w-full h-full">
+        {initError && (
+          <div className="absolute inset-0 flex items-center justify-center px-4 text-center">
+            <div className="max-w-md rounded-lg border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-300">
+              {initError}
+            </div>
+          </div>
+        )}
         {isLoading && <DefaultLoader />}
         {/* SSR-safe: children render only when map is loaded on client */}
-        {mapInstance && children}
+        {!initError && mapInstance && children}
       </div>
     </MapContext.Provider>
   );
@@ -314,7 +383,7 @@ function MarkerContent({ children, className }: MarkerContentProps) {
     <div className={cn("relative cursor-pointer", className)}>
       {children || <DefaultMarkerIcon />}
     </div>,
-    marker.getElement()
+    marker.getElement(),
   );
 }
 
@@ -387,7 +456,7 @@ function MarkerPopup({
     <div
       className={cn(
         "relative rounded-md border bg-popover p-3 text-popover-foreground shadow-md animate-in fade-in-0 zoom-in-95",
-        className
+        className,
       )}
     >
       {closeButton && (
@@ -403,7 +472,7 @@ function MarkerPopup({
       )}
       {children}
     </div>,
-    container
+    container,
   );
 }
 
@@ -473,12 +542,12 @@ function MarkerTooltip({
     <div
       className={cn(
         "rounded-md bg-foreground px-2 py-1 text-xs text-background shadow-md animate-in fade-in-0 zoom-in-95",
-        className
+        className,
       )}
     >
       {children}
     </div>,
-    container
+    container,
   );
 }
 
@@ -507,7 +576,7 @@ function MarkerLabel({
         "absolute left-1/2 -translate-x-1/2 whitespace-nowrap",
         "text-[10px] font-medium text-foreground",
         positionClasses[position],
-        className
+        className,
       )}
     >
       {children}
@@ -565,7 +634,7 @@ function ControlButton({
       type="button"
       className={cn(
         "flex items-center justify-center size-8 hover:bg-accent dark:hover:bg-accent/40 transition-colors",
-        disabled && "opacity-50 pointer-events-none cursor-not-allowed"
+        disabled && "opacity-50 pointer-events-none cursor-not-allowed",
       )}
       disabled={disabled}
     >
@@ -618,7 +687,7 @@ function MapControls({
         (error) => {
           console.error("Error getting location:", error);
           setWaitingForLocation(false);
-        }
+        },
       );
     }
   }, [map, onLocate]);
@@ -640,7 +709,7 @@ function MapControls({
       className={cn(
         "absolute z-10 flex flex-col gap-1.5",
         positionClasses[position],
-        className
+        className,
       )}
     >
       {showZoom && (
@@ -813,7 +882,7 @@ function MapPopup({
     <div
       className={cn(
         "relative rounded-md border bg-popover p-3 text-popover-foreground shadow-md animate-in fade-in-0 zoom-in-95",
-        className
+        className,
       )}
     >
       {closeButton && (
@@ -829,7 +898,7 @@ function MapPopup({
       )}
       {children}
     </div>,
-    container
+    container,
   );
 }
 
@@ -975,7 +1044,7 @@ function MapRoute({
 }
 
 type MapClusterLayerProps<
-  P extends GeoJSON.GeoJsonProperties = GeoJSON.GeoJsonProperties
+  P extends GeoJSON.GeoJsonProperties = GeoJSON.GeoJsonProperties,
 > = {
   /** GeoJSON FeatureCollection data or URL to fetch GeoJSON from */
   data: string | GeoJSON.FeatureCollection<GeoJSON.Point, P>;
@@ -992,18 +1061,18 @@ type MapClusterLayerProps<
   /** Callback when an unclustered point is clicked */
   onPointClick?: (
     feature: GeoJSON.Feature<GeoJSON.Point, P>,
-    coordinates: [number, number]
+    coordinates: [number, number],
   ) => void;
   /** Callback when a cluster is clicked. If not provided, zooms into the cluster */
   onClusterClick?: (
     clusterId: number,
     coordinates: [number, number],
-    pointCount: number
+    pointCount: number,
   ) => void;
 };
 
 function MapClusterLayer<
-  P extends GeoJSON.GeoJsonProperties = GeoJSON.GeoJsonProperties
+  P extends GeoJSON.GeoJsonProperties = GeoJSON.GeoJsonProperties,
 >({
   data,
   clusterMaxZoom = 14,
@@ -1175,7 +1244,7 @@ function MapClusterLayer<
     const handleClusterClick = async (
       e: MapLibreGL.MapMouseEvent & {
         features?: MapLibreGL.MapGeoJSONFeature[];
-      }
+      },
     ) => {
       const features = map.queryRenderedFeatures(e.point, {
         layers: [clusterLayerId],
@@ -1187,7 +1256,7 @@ function MapClusterLayer<
       const pointCount = feature.properties?.point_count as number;
       const coordinates = (feature.geometry as GeoJSON.Point).coordinates as [
         number,
-        number
+        number,
       ];
 
       if (onClusterClick) {
@@ -1207,7 +1276,7 @@ function MapClusterLayer<
     const handlePointClick = (
       e: MapLibreGL.MapMouseEvent & {
         features?: MapLibreGL.MapGeoJSONFeature[];
-      }
+      },
     ) => {
       if (!onPointClick || !e.features?.length) return;
 
@@ -1223,7 +1292,7 @@ function MapClusterLayer<
 
       onPointClick(
         feature as unknown as GeoJSON.Feature<GeoJSON.Point, P>,
-        coordinates
+        coordinates,
       );
     };
 

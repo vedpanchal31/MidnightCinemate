@@ -1,16 +1,17 @@
 import type { SerializedError } from "@reduxjs/toolkit";
 import type { FetchBaseQueryError } from "@reduxjs/toolkit/query";
+import moment from "moment";
 import toast from "react-hot-toast";
 
 export const handleError = (
-  error: FetchBaseQueryError | SerializedError
+  error: FetchBaseQueryError | SerializedError,
 ): void => {
   const message = extractErrorMessage(error);
   toast.error(message);
 };
 
 function extractErrorMessage(
-  error: FetchBaseQueryError | SerializedError
+  error: FetchBaseQueryError | SerializedError,
 ): string {
   // RTK Query error
   if ("status" in error) {
@@ -36,3 +37,15 @@ function extractErrorMessage(
 
   return "An unknown error occurred.";
 }
+
+export const formatDate = (
+  date: string | number | Date,
+  format: string = "hh:mm a",
+) => {
+  return moment.utc(date).local().format(format);
+};
+
+export const convertDateTimeToUTC = (date: string, time: string) => {
+  const utcDateTime = moment(`${date} ${time}`).local().utc().format();
+  return utcDateTime;
+};
