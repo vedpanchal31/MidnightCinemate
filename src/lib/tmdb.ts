@@ -137,9 +137,6 @@ class TMDBService {
 
     for (let attempt = 1; attempt <= retries; attempt++) {
       try {
-        console.log(
-          `[TMDB] Fetching (attempt ${attempt}/${retries}): ${url.toString()}`,
-        );
         const response = await fetch(url.toString(), {
           headers,
           signal: controller.signal,
@@ -156,7 +153,6 @@ class TMDBService {
         }
 
         const data = await response.json();
-        console.log(`[TMDB] Success: Got response for ${endpoint}`);
         return data;
       } catch (error) {
         lastError = error as Error;
@@ -165,7 +161,6 @@ class TMDBService {
         if (attempt < retries) {
           // Wait before retry (exponential backoff)
           const waitTime = 1000 * attempt;
-          console.log(`[TMDB] Retrying after ${waitTime}ms...`);
           await new Promise((resolve) => setTimeout(resolve, waitTime));
           continue;
         }
@@ -214,11 +209,24 @@ class TMDBService {
   /**
    * Get popular Hindi movies
    */
-  async getHindiMovies(page = 1): Promise<TMDBResponse> {
+  async getHindiMovies(
+    page = 1,
+    options?: {
+      releaseDateGte?: string;
+      releaseDateLte?: string;
+    },
+  ): Promise<TMDBResponse> {
     return this.fetch<TMDBResponse>("/discover/movie", {
       page: page.toString(),
       sort_by: "popularity.desc",
       with_original_language: "hi",
+      with_release_type: "2|3",
+      ...(options?.releaseDateGte
+        ? { "primary_release_date.gte": options.releaseDateGte }
+        : {}),
+      ...(options?.releaseDateLte
+        ? { "primary_release_date.lte": options.releaseDateLte }
+        : {}),
     });
   }
 

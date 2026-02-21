@@ -1,109 +1,17 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, Clock, Users, Calendar, Star } from "lucide-react";
-import { useGetMovieDetailsExtendedQuery } from "@/store/moviesApi";
-import { Shimmer, ShimmerText, ShimmerCard } from "@/components/ui/shimmer";
-import { ThemeToggle } from "@/components/ThemeToggle";
+import { ChevronLeft, Clock, Calendar, Star, Users } from "lucide-react";
+import {
+  useGetMovieDetailsExtendedQuery,
+  useGetTimeSlotsByMovieQuery,
+} from "@/store/moviesApi";
+import { Shimmer, ShimmerText } from "@/components/ui/shimmer";
 import { cn } from "@/lib/utils";
-import ProfileIcon from "@/components/ProfileIcon";
-
-interface TimeSlot {
-  id: string;
-  time: string;
-  availableSeats: number;
-  totalSeats: number;
-  screenType: string;
-  screenIcon: string;
-}
-
-interface DateSlot {
-  date: Date;
-  dayName: string;
-  dayNumber: number;
-  month: string;
-  isToday: boolean;
-}
-
-// Mock time slots data - can be modified based on date
-const generateTimeSlots = (date: Date): TimeSlot[] => {
-  // You can customize time slots based on the date here
-  const baseSlots = [
-    {
-      id: "1",
-      time: "10:00 AM",
-      availableSeats: 12,
-      totalSeats: 100,
-      screenType: "Standard (2D)",
-      screenIcon: "",
-    },
-    {
-      id: "2",
-      time: "01:30 PM",
-      availableSeats: 45,
-      totalSeats: 100,
-      screenType: "3D Screen",
-      screenIcon: "",
-    },
-    {
-      id: "3",
-      time: "05:00 PM",
-      availableSeats: 8,
-      totalSeats: 100,
-      screenType: "IMAX",
-      screenIcon: "",
-    },
-    {
-      id: "4",
-      time: "08:30 PM",
-      availableSeats: 2,
-      totalSeats: 100,
-      screenType: "4DX",
-      screenIcon: "",
-    },
-    {
-      id: "5",
-      time: "11:00 PM",
-      availableSeats: 67,
-      totalSeats: 100,
-      screenType: "Dolby Cinema",
-      screenIcon: "",
-    },
-  ];
-
-  // Randomize availability slightly based on date for demo
-  const dateSeed = date.getDate();
-  return baseSlots.map((slot, index) => ({
-    ...slot,
-    availableSeats: Math.max(
-      0,
-      slot.availableSeats + Math.floor((dateSeed + index) % 20) - 10,
-    ),
-  }));
-};
-
-// Generate date slots for next 7 days
-const generateDateSlots = (): DateSlot[] => {
-  const dates: DateSlot[] = [];
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  for (let i = 0; i < 7; i++) {
-    const date = new Date(today);
-    date.setDate(today.getDate() + i);
-
-    dates.push({
-      date,
-      dayName: date.toLocaleDateString("en-US", { weekday: "short" }),
-      dayNumber: date.getDate(),
-      month: date.toLocaleDateString("en-US", { month: "short" }),
-      isToday: i === 0,
-    });
-  }
-
-  return dates;
-};
+import { TimeSlot } from "@/lib/database/schema";
+import { formatDate } from "@/helpers/HelperFunction";
+import moment from "moment";
 
 export default function MovieDetailsPage({
   params,
@@ -112,113 +20,201 @@ export default function MovieDetailsPage({
 }) {
   const router = useRouter();
   const [movieId, setMovieId] = useState<number | null>(null);
-  const [timeSlots, setTimeSlots] = useState<TimeSlot[]>([]);
   const [selectedVideoUrl, setSelectedVideoUrl] = useState<string | null>(null);
-  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
-  const [selectedTimeSlot, setSelectedTimeSlot] = useState<TimeSlot | null>(
-    null,
+  const [selectedDate, setSelectedDate] = useState<string>(
+    new Date().toLocaleDateString("en-CA"), // YYYY-MM-DD in local time
   );
-  const [isDateTransitioning, setIsDateTransitioning] = useState(false);
+  const [showDatePicker, setShowDatePicker] = useState(false);
 
-  // Use extended query to get full movie data with cast and trailer
-  const { data: movie, isLoading } = useGetMovieDetailsExtendedQuery(
-    movieId ?? 0,
-    {
-      skip: !movieId,
-    },
-  );
+  // Generate date options with relative labels
+  const generateDateOptions = () => {
+    const dates = [];
+    const today = new Date();
+    const todayStr = today.toLocaleDateString("en-CA");
 
-  useEffect(() => {
-    params.then((p) => {
-      const id = parseInt(p.id);
-      setMovieId(id);
-      setTimeSlots(generateTimeSlots(selectedDate));
-    });
-  }, [params, selectedDate]);
+    for (let i = 0; i < 7; i++) {
+      const date = new Date(today.getTime() + i * 24 * 60 * 60 * 1000);
+      const dateStr = date.toLocaleDateString("en-CA");
 
-  const handleTimeSlotClick = (slot: TimeSlot) => {
-    setSelectedTimeSlot(slot);
-    const formattedDate = selectedDate.toISOString().split("T")[0];
-    router.push(
-      `/booking/${movieId}?date=${formattedDate}&time=${slot.time}&slotId=${slot.id}&screen=${slot.screenType}`,
-    );
+      let label;
+      if (i === 0) label = "Today";
+      else if (i === 1) label = "Tomorrow";
+      else
+        label = date.toLocaleDateString("en-US", {
+          weekday: "short",
+          day: "numeric",
+        });
+
+      dates.push({
+        date: dateStr,
+        label,
+        isToday: dateStr === todayStr,
+      });
+    }
+
+    return dates;
   };
 
-  const handleDateSelect = (dateSlot: DateSlot) => {
-    setIsDateTransitioning(true);
-    setTimeout(() => {
-      setSelectedDate(dateSlot.date);
-      setSelectedTimeSlot(null);
-      setIsDateTransitioning(false);
-    }, 150);
+  const { data: movie, isLoading } = useGetMovieDetailsExtendedQuery(
+    movieId ?? 0,
+    { skip: !movieId },
+  );
+
+  const { data: rawTimeSlots = [], isLoading: timeSlotsLoading } =
+    useGetTimeSlotsByMovieQuery(
+      {
+        tmdb_movie_id: movieId ?? 0,
+        date_from: selectedDate,
+        date_to: selectedDate,
+      },
+      { skip: !movieId },
+    );
+
+  // Safely derive time slots + filter past shows on today
+  const timeSlots = useMemo(() => {
+    const slotsData = Array.isArray(rawTimeSlots) ? rawTimeSlots : [];
+    let slots = [...slotsData];
+
+    const now = new Date();
+    const todayStr = now.toLocaleDateString("en-CA");
+
+    if (selectedDate === todayStr) {
+      const currentHours = now.getHours();
+      const currentMinutes = now.getMinutes();
+
+      slots = slots.filter((slot: TimeSlot) => {
+        const [hours, minutes] = slot.show_time.split(":").map(Number);
+        return (
+          hours > currentHours ||
+          (hours === currentHours && minutes >= currentMinutes)
+        );
+      });
+    }
+
+    return slots;
+  }, [rawTimeSlots, selectedDate]);
+
+  // Parse params once
+  useEffect(() => {
+    params.then((p) => {
+      const id = parseInt(p.id, 10);
+      if (!Number.isNaN(id)) setMovieId(id);
+    });
+  }, [params]);
+
+  // Close date picker on outside click
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (!(event.target as HTMLElement)?.closest(".date-picker-dropdown")) {
+        setShowDatePicker(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const handleTimeSlotClick = (slot: TimeSlot) => {
+    if (slot.available_seats > 0) {
+      const queryParams = new URLSearchParams({
+        date: selectedDate,
+        time: slot.show_time,
+        slotId: slot.id,
+      }).toString();
+      router.push(`/booking/${movieId}?${queryParams}`);
+    }
   };
 
   const getAvailabilityStatus = (availableSeats: number) => {
     if (availableSeats === 0)
-      return { text: "Sold Out", color: "text-red-500" };
-    if (availableSeats <= 10)
-      return { text: "Few Left", color: "text-orange-500" };
-    return { text: "Available", color: "text-green-500" };
+      return {
+        text: "Sold Out",
+        color: "text-red-500",
+        barColor: "bg-red-500",
+      };
+    if (availableSeats <= 40)
+      return {
+        text: "Few Left",
+        color: "text-orange-500",
+        barColor: "bg-orange-500",
+      };
+    return {
+      text: "Available",
+      color: "text-green-500",
+      barColor: "bg-green-500",
+    };
   };
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <div className="min-h-screen bg-[#0a0a0a] text-white">
       {/* Header */}
-      <header className="p-4 border-b border-border backdrop-blur-md sticky top-0 z-50 bg-background/80">
-        <div className="max-w-6xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <button
-              onClick={() => router.back()}
-              className="p-2 hover:bg-accent rounded-full transition-colors"
-            >
-              <ChevronLeft className="w-6 h-6" />
-            </button>
-            <h1 className="text-xl font-bold">
-              {movie?.title || <ShimmerText className="h-6 w-48" />}
-            </h1>
-          </div>
-          <div className="flex items-center gap-4">
-            <ThemeToggle />
-            <ProfileIcon />
-          </div>
+      <header className="p-4 border-b border-white/10 backdrop-blur-md sticky top-0 z-50 bg-black/50">
+        <div className="max-w-6xl mx-auto flex items-center gap-4">
+          <button
+            onClick={() => router.back()}
+            className="p-2 hover:bg-white/10 rounded-full transition-colors cursor-pointer"
+          >
+            <ChevronLeft className="w-6 h-6" />
+          </button>
+          <h1 className="text-xl font-bold">
+            {movie?.title || <ShimmerText className="h-6 w-48" />}
+          </h1>
         </div>
       </header>
 
       {/* Main Content */}
       <main className="max-w-6xl mx-auto px-4 py-8">
         {isLoading ? (
-          <div className="space-y-8">
-            {/* Movie Details Shimmer */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-              <div className="lg:col-span-2 space-y-6">
-                {/* Movie Poster and Info Shimmer */}
-                <div className="bg-zinc-900/50 rounded-2xl border border-zinc-800 overflow-hidden">
-                  <Shimmer className="aspect-video w-full" />
-                  <div className="p-6 space-y-4">
-                    <ShimmerText className="h-8 w-3/4" />
-                    <div className="flex items-center gap-4">
-                      <Shimmer className="h-6 w-20 rounded-full" />
-                      <Shimmer className="h-6 w-16 rounded-full" />
-                      <Shimmer className="h-6 w-24 rounded-full" />
-                    </div>
-                    <ShimmerText lines={3} className="w-full" />
+          <div className="space-y-12">
+            {/* Trailer Section Shimmer */}
+            <div className="space-y-4">
+              <Shimmer className="h-8 w-32" />
+              <Shimmer className="w-full aspect-video rounded-2xl" />
+            </div>
+
+            {/* Related Videos Shimmer */}
+            <div className="space-y-4">
+              <Shimmer className="h-8 w-48" />
+              <div className="flex gap-3 overflow-hidden">
+                {[1, 2, 3, 4, 5].map((i) => (
+                  <Shimmer key={i} className="shrink-0 w-40 h-28 rounded-lg" />
+                ))}
+              </div>
+            </div>
+
+            <div className="grid md:grid-cols-3 gap-8">
+              {/* About Shimmer */}
+              <div className="md:col-span-2 space-y-4">
+                <Shimmer className="h-8 w-32" />
+                <div className="bg-zinc-900/50 rounded-2xl border border-zinc-800 p-6 space-y-6">
+                  <div className="space-y-2">
+                    <Shimmer className="h-4 w-full" />
+                    <Shimmer className="h-4 w-5/6" />
+                    <Shimmer className="h-4 w-4/6" />
+                  </div>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4 pt-4 border-t border-zinc-700">
+                    {[1, 2, 3, 4, 5, 6].map((i) => (
+                      <div key={i} className="space-y-2">
+                        <Shimmer className="h-3 w-16" />
+                        <Shimmer className="h-5 w-24" />
+                      </div>
+                    ))}
                   </div>
                 </div>
               </div>
 
-              {/* Cast Section Shimmer */}
+              {/* Cast Shimmer */}
               <div className="space-y-4">
-                <Shimmer className="h-6 w-32" />
-                <div className="grid grid-cols-2 gap-3">
-                  {Array.from({ length: 6 }).map((_, i) => (
+                <Shimmer className="h-8 w-24" />
+                <div className="grid grid-cols-2 gap-4">
+                  {[1, 2, 3, 4].map((i) => (
                     <div
                       key={i}
                       className="bg-zinc-900/50 rounded-xl border border-zinc-800 overflow-hidden"
                     >
-                      <Shimmer className="h-24 w-full" />
+                      <Shimmer className="w-full h-56" />
                       <div className="p-3 space-y-2">
-                        <Shimmer className="h-4 w-20" />
-                        <Shimmer className="h-3 w-16" />
+                        <Shimmer className="h-4 w-3/4" />
+                        <Shimmer className="h-3 w-1/2" />
                       </div>
                     </div>
                   ))}
@@ -226,40 +222,39 @@ export default function MovieDetailsPage({
               </div>
             </div>
 
-            {/* Date Selector Shimmer */}
+            {/* Showtimes Shimmer */}
             <div className="space-y-4">
-              <Shimmer className="h-6 w-32" />
-              <div className="flex gap-3">
-                {Array.from({ length: 7 }).map((_, i) => (
-                  <Shimmer key={i} className="h-20 w-20 rounded-xl" />
-                ))}
-              </div>
-            </div>
+              <Shimmer className="h-8 w-48" />
+              <div className="bg-zinc-900/50 rounded-2xl border border-zinc-800 p-6 space-y-6">
+                <div className="flex items-center gap-4 pb-4 border-b border-zinc-700">
+                  <Shimmer className="w-5 h-5" />
+                  <Shimmer className="h-6 w-32" />
+                </div>
 
-            {/* Time Slots Shimmer */}
-            <div className="space-y-4">
-              <Shimmer className="h-6 w-32" />
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-                {Array.from({ length: 5 }).map((_, i) => (
-                  <div
-                    key={i}
-                    className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-4 space-y-3 min-h-[180px]"
-                  >
-                    <div className="flex flex-col items-center space-y-1 pb-2 border-b border-zinc-700/50">
-                      <Shimmer className="h-8 w-8 rounded-lg" />
-                      <Shimmer className="h-3 w-16" />
+                {/* Date Shimmer */}
+                <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-2 pb-4">
+                  {[1, 2, 3, 4, 5, 6, 7].map((i) => (
+                    <Shimmer key={i} className="h-20 rounded-xl w-full" />
+                  ))}
+                </div>
+
+                {/* Time Slots Shimmer */}
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2">
+                  {[1, 2, 3, 4, 5].map((i) => (
+                    <div
+                      key={i}
+                      className="p-4 rounded-xl border border-zinc-800 bg-zinc-900/30 space-y-2"
+                    >
+                      <div className="flex justify-center items-center gap-2">
+                        <Shimmer className="w-4 h-4" />
+                        <Shimmer className="h-6 w-16" />
+                      </div>
+                      <Shimmer className="h-4 w-20 mx-auto" />
+                      <Shimmer className="h-3 w-12 mx-auto" />
+                      <Shimmer className="h-1 w-full mt-2 rounded-full" />
                     </div>
-                    <div className="flex items-center justify-center gap-2">
-                      <Shimmer className="h-4 w-4 rounded" />
-                      <Shimmer className="h-6 w-16 rounded" />
-                    </div>
-                    <div className="space-y-2">
-                      <Shimmer className="h-3 w-20 rounded" />
-                      <Shimmer className="h-3 w-16 rounded" />
-                    </div>
-                    <Shimmer className="h-1 w-full rounded-full mt-auto" />
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
             </div>
           </div>
@@ -269,54 +264,36 @@ export default function MovieDetailsPage({
             <section className="space-y-4">
               <h2 className="text-2xl font-bold">Trailer</h2>
               <div className="relative w-full aspect-video bg-zinc-900 rounded-2xl overflow-hidden border border-zinc-800 flex items-center justify-center">
-                {isLoading ? (
-                  <div className="w-full h-full bg-linear-to-br from-primary/20 to-secondary/20 flex items-center justify-center">
-                    <div className="text-center space-y-4">
-                      <div className="w-16 h-16 mx-auto bg-primary/20 rounded-full flex items-center justify-center border-2 border-primary animate-pulse">
-                        <svg
-                          className="w-8 h-8 text-primary ml-1"
-                          fill="currentColor"
-                          viewBox="0 0 20 20"
-                        >
-                          <path d="M6.3 2.841A1.5 1.5 0 004 4.11V15.89a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z" />
-                        </svg>
-                      </div>
-                      <p className="text-zinc-400">Loading trailer...</p>
-                    </div>
-                  </div>
-                ) : (selectedVideoUrl || movie?.trailer_url) &&
-                  (selectedVideoUrl || movie?.trailer_url)?.includes(
-                    "youtube",
-                  ) ? (
+                {(selectedVideoUrl || movie?.trailer_url)?.includes(
+                  "youtube",
+                ) ? (
                   <iframe
                     className="w-full h-full rounded-xl"
-                    src={(selectedVideoUrl || movie?.trailer_url) as string}
-                    title="Movie Video"
+                    src={(selectedVideoUrl || movie?.trailer_url)!}
+                    title="Movie Trailer"
                     frameBorder="0"
                     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                     allowFullScreen
                   />
                 ) : (
-                  <div className="w-full h-full bg-linear-to-br from-primary/20 to-secondary/20 flex items-center justify-center">
-                    <div className="text-center space-y-4">
-                      <div className="w-16 h-16 mx-auto bg-primary/20 rounded-full flex items-center justify-center border-2 border-primary">
-                        <svg
-                          className="w-8 h-8 text-primary ml-1"
-                          fill="currentColor"
-                          viewBox="0 0 20 20"
-                        >
-                          <path d="M6.3 2.841A1.5 1.5 0 004 4.11V15.89a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z" />
-                        </svg>
-                      </div>
-                      <p className="text-zinc-400">Trailer not available</p>
+                  <div className="flex flex-col items-center justify-center text-zinc-400">
+                    <div className="w-16 h-16 bg-primary/20 rounded-full flex items-center justify-center border-2 border-primary mb-4">
+                      <svg
+                        className="w-8 h-8 text-primary ml-1"
+                        fill="currentColor"
+                        viewBox="0 0 20 20"
+                      >
+                        <path d="M6.3 2.841A1.5 1.5 0 004 4.11V15.89a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z" />
+                      </svg>
                     </div>
+                    <p>Trailer not available</p>
                   </div>
                 )}
               </div>
             </section>
 
-            {/* Related Videos Section */}
-            {movie?.videos && movie.videos.length > 0 && (
+            {/* Related Videos */}
+            {movie?.videos?.length ? (
               <section className="space-y-4">
                 <h2 className="text-2xl font-bold">More Videos</h2>
                 <div className="flex gap-3 overflow-x-auto pb-2 custom-scrollbar-horizontal">
@@ -325,24 +302,23 @@ export default function MovieDetailsPage({
                       key={video.id}
                       onClick={() => setSelectedVideoUrl(video.url)}
                       className={cn(
-                        "shrink-0 w-40 h-28 rounded-lg border transition-all duration-300 overflow-hidden group",
+                        "shrink-0 w-40 h-28 rounded-lg border transition-all duration-300 overflow-hidden group cursor-pointer",
                         selectedVideoUrl === video.url
                           ? "border-primary bg-primary/10"
                           : "border-zinc-700 bg-zinc-800/50 hover:border-primary/50",
                       )}
                     >
                       <div
-                        className="w-full h-full flex items-center justify-center relative overflow-hidden bg-cover bg-center bg-no-repeat"
+                        className="w-full h-full relative bg-cover bg-center"
                         style={{
                           backgroundImage: movie.backdrop_url
-                            ? `url('${movie.backdrop_url}')`
-                            : "none",
+                            ? `url(${movie.backdrop_url})`
+                            : undefined,
                           backgroundColor: "#18181b",
                         }}
                       >
-                        {/* Play button overlay */}
-                        <div className="absolute inset-0 flex items-center justify-center bg-black/40 group-hover:bg-black/60 transition-colors">
-                          <div className="w-12 h-12 bg-primary/80 rounded-full flex items-center justify-center group-hover:bg-primary transition-colors">
+                        <div className="absolute inset-0 bg-black/40 group-hover:bg-black/60 transition-colors flex items-center justify-center">
+                          <div className="w-12 h-12 bg-primary/80 rounded-full flex items-center justify-center group-hover:bg-primary">
                             <svg
                               className="w-6 h-6 text-white ml-0.5"
                               fill="currentColor"
@@ -352,9 +328,8 @@ export default function MovieDetailsPage({
                             </svg>
                           </div>
                         </div>
-                        {/* Video type badge and name */}
-                        <div className="absolute bottom-0 left-0 right-0 bg-linear-to-t from-black/80 to-transparent p-2">
-                          <p className="text-xs font-semibold text-white line-clamp-2">
+                        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-2">
+                          <p className="text-xs font-semibold line-clamp-2">
                             {video.name}
                           </p>
                           <p className="text-xs text-zinc-300">{video.type}</p>
@@ -364,25 +339,23 @@ export default function MovieDetailsPage({
                   ))}
                 </div>
               </section>
-            )}
+            ) : null}
 
-            {/* About & Cast in Grid */}
+            {/* About + Cast */}
             <div className="grid md:grid-cols-3 gap-8">
-              {/* About Section */}
+              {/* About */}
               <div className="md:col-span-2 space-y-4">
                 <h2 className="text-2xl font-bold">About</h2>
                 <div className="bg-zinc-900/50 rounded-2xl border border-zinc-800 p-6 space-y-6">
                   <p className="text-zinc-300 leading-relaxed">
-                    {movie?.overview ||
-                      "Movie description will appear here with details about the plot, themes, and storyline."}
+                    {movie.overview || "No description available."}
                   </p>
 
-                  {/* Movie Details */}
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-4 pt-4 border-t border-zinc-700">
-                    <div className="space-y-2">
+                    <div>
                       <p className="text-zinc-500 text-sm">Release Date</p>
                       <p className="font-semibold">
-                        {movie?.release_date
+                        {movie.release_date
                           ? new Date(movie.release_date).toLocaleDateString(
                               "en-US",
                               {
@@ -394,78 +367,63 @@ export default function MovieDetailsPage({
                           : "N/A"}
                       </p>
                     </div>
-                    <div className="space-y-2">
+                    <div>
                       <p className="text-zinc-500 text-sm">Rating</p>
                       <div className="flex items-center gap-2">
                         <Star className="w-4 h-4 fill-primary text-primary" />
-                        <p className="font-semibold">
-                          {movie?.vote_average.toFixed(1)}/10
-                        </p>
+                        <span className="font-semibold">
+                          {movie.vote_average.toFixed(1)}/10
+                        </span>
                       </div>
                     </div>
-                    <div className="space-y-2">
+                    <div>
                       <p className="text-zinc-500 text-sm">Duration</p>
                       <p className="font-semibold">
-                        {movie?.runtime
+                        {movie.runtime
                           ? `${Math.floor(movie.runtime / 60)}h ${movie.runtime % 60}m`
                           : "N/A"}
                       </p>
                     </div>
-                    <div className="space-y-2">
+                    <div>
                       <p className="text-zinc-500 text-sm">Language</p>
                       <p className="font-semibold">English</p>
                     </div>
-                    <div className="space-y-2">
+                    <div>
                       <p className="text-zinc-500 text-sm">Genre</p>
                       <p className="font-semibold text-sm">
-                        {movie?.genres && movie.genres.length > 0
-                          ? movie.genres.slice(0, 2).join(", ")
-                          : "Drama"}
+                        {movie.genres?.slice(0, 2).join(", ") || "Drama"}
                       </p>
                     </div>
-                    <div className="space-y-2">
+                    <div>
                       <p className="text-zinc-500 text-sm">Director</p>
                       <p className="font-semibold">
-                        {movie?.director?.name || "N/A"}
+                        {movie.director?.name || "N/A"}
                       </p>
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* Cast Section */}
+              {/* Cast */}
               <div className="space-y-4">
                 <h2 className="text-2xl font-bold">Cast</h2>
                 <div className="grid grid-cols-2 gap-4 max-h-96 overflow-y-auto custom-scrollbar">
-                  {isLoading ? (
-                    Array.from({ length: 4 }).map((_, i) => (
-                      <div
-                        key={i}
-                        className="bg-zinc-900/50 rounded-xl border border-zinc-800 overflow-hidden"
-                      >
-                        <ShimmerText className="h-56 mb-0" />
-                        <div className="p-3 space-y-2">
-                          <ShimmerText className="h-4 w-20" />
-                          <ShimmerText className="h-3 w-16" />
-                        </div>
-                      </div>
-                    ))
-                  ) : movie?.cast && movie.cast.length > 0 ? (
-                    movie.cast.slice(0, 6).map((actor) => (
+                  {movie.cast?.length ? (
+                    movie.cast.map((actor) => (
                       <div
                         key={actor.id}
                         className="bg-zinc-900/50 rounded-xl border border-zinc-800 overflow-hidden hover:border-primary/50 transition-colors"
                       >
-                        <div className="w-full h-24 bg-zinc-800 overflow-hidden flex items-center justify-center">
+                        <div className="w-full h-56 bg-zinc-800 flex items-center justify-center">
                           {actor.profile_url ? (
                             // eslint-disable-next-line @next/next/no-img-element
                             <img
                               src={actor.profile_url}
                               alt={actor.name}
                               className="w-full h-full object-cover"
-                              onError={(e) => {
-                                e.currentTarget.style.display = "none";
-                              }}
+                              onError={(e) =>
+                                (e.currentTarget.style.display = "none")
+                              }
                             />
                           ) : (
                             <Users className="w-8 h-8 text-zinc-600" />
@@ -482,197 +440,126 @@ export default function MovieDetailsPage({
                       </div>
                     ))
                   ) : (
-                    <div className="grid grid-cols-2 gap-3">
-                      {Array.from({ length: 6 }).map((_, i) => (
-                        <ShimmerCard key={i} />
-                      ))}
-                    </div>
+                    <p className="text-zinc-400 text-sm">
+                      No cast information available
+                    </p>
                   )}
                 </div>
               </div>
             </div>
 
-            {/* Time Slots Section */}
+            {/* Showtimes */}
             <section className="space-y-4">
               <h2 className="text-2xl font-bold">Select Show Time</h2>
-              <div className="bg-zinc-900/50 rounded-2xl border border-zinc-800 p-6 space-y-6 overflow-x-hidden">
-                {/* Date Selector */}
-                <div className="space-y-4 w-full">
-                  <div className="flex items-center gap-2">
-                    <Calendar className="w-5 h-5 text-primary" />
-                    <span className="font-semibold">Select Date</span>
-                  </div>
-                  <div className="relative w-full">
-                    <div className="flex gap-3 overflow-x-auto overflow-y-hidden pb-3 px-1 -mx-1 custom-scrollbar-horizontal">
-                      <div className="flex gap-3 min-w-max p-5">
-                        {generateDateSlots().map((dateSlot, index) => {
-                          const isSelected =
-                            selectedDate.toDateString() ===
-                            dateSlot.date.toDateString();
-                          return (
-                            <button
-                              key={dateSlot.date.toISOString()}
-                              onClick={() => handleDateSelect(dateSlot)}
-                              className={cn(
-                                "flex flex-col items-center p-3 rounded-xl border transition-all duration-300 min-w-[80px] transform",
-                                "hover:scale-105 hover:-translate-y-1",
-                                isSelected
-                                  ? "border-primary bg-primary/20 text-white scale-105 -translate-y-1 shadow-lg shadow-primary/30"
-                                  : "border-zinc-700 bg-zinc-800/50 hover:border-primary/50 hover:bg-primary/10",
-                                dateSlot.isToday &&
-                                  !isSelected &&
-                                  "ring-2 ring-primary/30",
-                                "animate-in fade-in slide-in-from-bottom-2",
-                              )}
-                              style={{
-                                animationDelay: `${index * 50}ms`,
-                                animationDuration: "400ms",
-                                animationFillMode: "both",
-                              }}
-                            >
-                              <span className="text-xs font-medium text-zinc-400 mb-1 transition-colors duration-200">
-                                {dateSlot.dayName}
-                              </span>
-                              <span className="text-lg font-bold mb-1 transition-transform duration-200 group-hover:scale-110">
-                                {dateSlot.dayNumber}
-                              </span>
-                              <span className="text-xs text-zinc-400 transition-colors duration-200">
-                                {dateSlot.month}
-                              </span>
-                              {dateSlot.isToday && (
-                                <span className="text-xs text-primary font-semibold mt-1 animate-pulse">
-                                  Today
-                                </span>
-                              )}
-                              {/* Selection indicator */}
-                              {isSelected && (
-                                <div className="absolute -top-1 -right-1 w-3 h-3 bg-primary rounded-full animate-in zoom-in-95 duration-300">
-                                  <div className="w-full h-full bg-primary rounded-full animate-ping absolute" />
-                                </div>
-                              )}
-                            </button>
-                          );
-                        })}
+              <div className="bg-zinc-900/50 rounded-2xl border border-zinc-800 p-6 space-y-6">
+                <div className="flex items-center gap-4 pb-4 border-b border-zinc-700">
+                  <Calendar className="w-5 h-5 text-primary" />
+                  <span className="font-semibold">Select Date</span>
+                </div>
+
+                <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-4 pb-4">
+                  {generateDateOptions().map((dateOption) => (
+                    <button
+                      key={dateOption.date}
+                      onClick={() => setSelectedDate(dateOption.date)}
+                      className={cn(
+                        "p-3 rounded-xl border text-center transition-all duration-300 cursor-pointer",
+                        dateOption.date === selectedDate
+                          ? "border-primary bg-primary/20 text-primary scale-105 shadow-lg shadow-primary/20"
+                          : "border-zinc-700 bg-zinc-800/50 hover:border-primary hover:bg-primary/10 hover:scale-105",
+                      )}
+                    >
+                      <div className="text-sm font-semibold">
+                        {dateOption.label}
                       </div>
-                    </div>
-                  </div>
+                      <div className="text-xs text-zinc-400">
+                        {formatDate(dateOption.date, "ddd, MMM D")}
+                      </div>
+                      {dateOption.isToday && (
+                        <div className="text-xs text-primary font-medium">
+                          Today
+                        </div>
+                      )}
+                    </button>
+                  ))}
                 </div>
 
-                {/* Selected Date Display */}
-                <div
-                  className={cn(
-                    "flex items-center gap-2 pb-4 border-b border-zinc-700 transition-all duration-300",
-                    isDateTransitioning && "opacity-50 scale-95",
-                  )}
-                >
-                  <Calendar
-                    className={cn(
-                      "w-5 h-5 text-primary transition-transform duration-300",
-                      isDateTransitioning && "animate-spin",
-                    )}
-                  />
-                  <span className="font-semibold transition-all duration-300">
-                    {selectedDate.toLocaleDateString("en-US", {
-                      weekday: "long",
-                      month: "long",
-                      day: "numeric",
-                    })}
-                  </span>
-                  <span className="text-sm text-zinc-400 ml-auto transition-all duration-300">
-                    {selectedDate.toLocaleDateString("en-US", {
-                      month: "short",
-                      day: "numeric",
-                    })}
-                  </span>
-                </div>
-
-                {/* Time Slots Grid */}
-                <div
-                  className={cn(
-                    "grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 transition-all duration-500",
-                    isDateTransitioning && "opacity-0 scale-95",
-                  )}
-                >
-                  {timeSlots.map((slot, index) => {
-                    const availability = getAvailabilityStatus(
-                      slot.availableSeats,
-                    );
-                    const isAvailable = slot.availableSeats > 0;
-
-                    return (
-                      <button
-                        key={slot.id}
-                        onClick={() => isAvailable && handleTimeSlotClick(slot)}
-                        disabled={!isAvailable}
-                        className={cn(
-                          "relative p-4 rounded-xl border transition-all duration-300 text-center space-y-3 transform min-h-[180px]",
-                          "hover:scale-105 hover:-translate-y-1",
-                          isAvailable
-                            ? "border-zinc-700 bg-zinc-800/50 hover:border-primary hover:bg-primary/10 cursor-pointer"
-                            : "border-zinc-800 bg-zinc-900/30 cursor-not-allowed opacity-50",
-                          selectedTimeSlot?.id === slot.id &&
-                            "border-primary bg-primary/20 scale-105 -translate-y-1 shadow-lg shadow-primary/30",
-                          "animate-in fade-in slide-in-from-bottom-2",
-                        )}
-                        style={{
-                          animationDelay: `${index * 100}ms`,
-                          animationDuration: "500ms",
-                          animationFillMode: "both",
-                        }}
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2">
+                  {timeSlotsLoading ? (
+                    Array.from({ length: 5 }).map((_, i) => (
+                      <div
+                        key={i}
+                        className="p-4 rounded-xl border border-zinc-800 bg-zinc-900/30 space-y-2"
                       >
-                        {/* Screen Type Header */}
-                        <div className="flex flex-col items-center space-y-1 pb-2 border-b border-zinc-700/50">
-                          <span className="text-2xl">{slot.screenIcon}</span>
-                          <span className="text-xs font-semibold text-primary truncate max-w-full">
-                            {slot.screenType}
-                          </span>
-                        </div>
+                        <Shimmer className="h-6 w-16 mx-auto" />
+                        <Shimmer className="h-4 w-3/4 mx-auto" />
+                        <Shimmer className="h-3 w-1/2 mx-auto" />
+                      </div>
+                    ))
+                  ) : timeSlots.length > 0 ? (
+                    timeSlots.map((slot) => {
+                      const availability = getAvailabilityStatus(
+                        slot.available_seats,
+                      );
+                      const isAvailable = slot.available_seats > 0;
+                      const availabilityPercent =
+                        slot.total_seats > 0
+                          ? (slot.available_seats / slot.total_seats) * 100
+                          : 0;
 
-                        {/* Time Display */}
-                        <div className="flex items-center justify-center gap-2">
-                          <Clock className="w-4 h-4 transition-transform duration-200 group-hover:scale-110" />
-                          <span className="font-bold text-lg transition-transform duration-200 group-hover:scale-110">
-                            {slot.time}
-                          </span>
-                        </div>
-
-                        {/* Availability Info */}
-                        <div className="space-y-2">
+                      return (
+                        <button
+                          key={slot.id}
+                          onClick={() => handleTimeSlotClick(slot)}
+                          disabled={!isAvailable}
+                          className={cn(
+                            "p-4 rounded-xl border text-center space-y-2 transition-all duration-300",
+                            isAvailable
+                              ? "border-zinc-700 bg-zinc-800/50 hover:border-primary hover:bg-primary/10 hover:scale-105 cursor-pointer"
+                              : "border-zinc-800 bg-zinc-900/30 cursor-not-allowed opacity-50",
+                          )}
+                        >
+                          <div className="flex items-center justify-center gap-2">
+                            <Clock className="w-4 h-4" />
+                            <span className="font-bold text-lg">
+                              {moment(`2000-01-01T${slot.show_time}`).format(
+                                "hh:mm A",
+                              )}
+                            </span>
+                          </div>
                           <p
                             className={cn(
-                              "text-xs font-semibold transition-colors duration-200",
+                              "text-xs font-semibold",
                               availability.color,
                             )}
                           >
                             {availability.text}
                           </p>
-                          <p className="text-xs text-zinc-400 transition-opacity duration-200">
-                            {slot.availableSeats} seats
+                          <p className="text-xs text-zinc-400">
+                            {slot.available_seats} seats
                           </p>
-                        </div>
+                          <p className="text-xs text-zinc-500 font-medium">
+                            {slot.screen_type}
+                          </p>
 
-                        {/* Availability indicator bar */}
-                        <div className="w-full h-1 bg-zinc-700 rounded-full overflow-hidden mt-auto">
-                          <div
-                            className="h-full bg-gradient-to-r from-primary to-red-600 transition-all duration-700 ease-out"
-                            style={{
-                              width: `${(slot.availableSeats / slot.totalSeats) * 100}%`,
-                            }}
-                          />
-                        </div>
-
-                        {/* Selection indicator */}
-                        {selectedTimeSlot?.id === slot.id && (
-                          <div className="absolute -top-2 -right-2 w-4 h-4 bg-primary rounded-full animate-in zoom-in-95 duration-300">
-                            <div className="w-full h-full bg-primary rounded-full animate-ping absolute" />
+                          <div className="w-full h-1 bg-zinc-700 rounded-full overflow-hidden mt-2">
+                            <div
+                              className={cn("h-full", availability.barColor)}
+                              style={{
+                                width: `${availabilityPercent}%`,
+                              }}
+                            />
                           </div>
-                        )}
-                      </button>
-                    );
-                  })}
+                        </button>
+                      );
+                    })
+                  ) : (
+                    <div className="col-span-full text-center py-8 text-zinc-400">
+                      No show times available for this date
+                    </div>
+                  )}
                 </div>
 
-                {/* Legend */}
                 <div className="flex flex-wrap gap-6 text-sm pt-4 border-t border-zinc-700">
                   <div className="flex items-center gap-2">
                     <div className="w-3 h-3 rounded-full bg-green-500" />
@@ -691,8 +578,8 @@ export default function MovieDetailsPage({
             </section>
           </div>
         ) : (
-          <div className="text-center py-12">
-            <p className="text-zinc-400">Unable to load movie details</p>
+          <div className="text-center py-12 text-zinc-400">
+            Unable to load movie details
           </div>
         )}
       </main>

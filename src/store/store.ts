@@ -1,5 +1,5 @@
 // Clean, auth-only store
-import { configureStore } from "@reduxjs/toolkit";
+import { configureStore, Reducer, UnknownAction } from "@reduxjs/toolkit";
 import { persistStore, persistReducer } from "redux-persist";
 import storage from "redux-persist/lib/storage";
 
@@ -35,12 +35,14 @@ const authPersistConfig = {
   ],
 };
 
-const persistedReducer = persistReducer(authPersistConfig, authReducer);
-
 // Configure auth-only store
 export const store = configureStore({
   reducer: {
-    auth: persistedReducer,
+    auth: persistReducer(authPersistConfig, authReducer) as Reducer<
+      unknown,
+      UnknownAction,
+      unknown
+    >,
     [authApi.reducerPath]: authApi.reducer,
     [moviesApi.reducerPath]: moviesApi.reducer,
   },

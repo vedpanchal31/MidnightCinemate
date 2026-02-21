@@ -6,19 +6,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
-import {
-  ArrowLeft,
-  Lock,
-  Shield,
-  CheckCircle,
-  ArrowRight,
-  AlertCircle,
-} from "lucide-react";
+import { ArrowLeft, Lock, Shield, CheckCircle, ArrowRight } from "lucide-react";
 import { showToast } from "@/lib/toast";
-import { Formik, Form, Field, ErrorMessage } from "formik";
+import { Formik, Form } from "formik";
 import * as Yup from "yup";
 import {
   YupPassword,
@@ -75,7 +66,7 @@ export default function ResetPasswordPage() {
       // In a real implementation with unique tokens, this would come from the OTP verification response
       const resetToken = email;
 
-      const result = await resetPassword({
+      await resetPassword({
         reset_token: resetToken,
         new_password: values.newPassword,
       }).unwrap();
@@ -91,14 +82,14 @@ export default function ResetPasswordPage() {
         router.push("/login");
       }, 2000);
     } catch (error) {
-      handleError(error as Error)
+      handleError(error as Error);
     } finally {
       setSubmitting(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex bg-black overflow-hidden">
+    <div className="min-h-screen flex bg-background text-foreground overflow-hidden">
       {/* Left Side - Hero Section */}
       <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden">
         {/* Background with gradient overlay */}
@@ -165,7 +156,7 @@ export default function ResetPasswordPage() {
       </div>
 
       {/* Right Side - Reset Password Form */}
-      <div className="w-full lg:w-1/2 flex items-center justify-center p-6 lg:p-8 bg-gradient-to-br from-zinc-900 via-zinc-800 to-zinc-900 relative overflow-hidden">
+      <div className="w-full lg:w-1/2 flex items-center justify-center p-6 lg:p-8 bg-gradient-to-br from-background via-card to-background relative overflow-hidden">
         {/* Background decorative elements */}
         <div className="absolute inset-0">
           <div className="absolute top-0 right-0 w-96 h-96 bg-primary/20 rounded-full blur-3xl animate-pulse" />
@@ -185,10 +176,10 @@ export default function ResetPasswordPage() {
             <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center shadow-lg shadow-red-900/50">
               <Lock className="w-5 h-5 text-white" />
             </div>
-            <span className="text-xl font-bold text-white">Cinemate</span>
+            <span className="text-xl font-bold text-foreground">Cinemate</span>
           </div>
 
-          <div className="bg-zinc-900/60 border border-zinc-800/50 backdrop-blur-2xl shadow-2xl rounded-2xl p-6 lg:p-8">
+          <div className="bg-card/80 border border-border/70 backdrop-blur-2xl shadow-2xl rounded-2xl p-6 lg:p-8">
             {/* Success state */}
             {isSubmitted ? (
               <div className="text-center space-y-6">
@@ -196,13 +187,13 @@ export default function ResetPasswordPage() {
                   <CheckCircle className="w-8 h-8 text-green-500" />
                 </div>
                 <div className="space-y-2">
-                  <h2 className="text-2xl font-bold text-white">
+                  <h2 className="text-2xl font-bold text-foreground">
                     Password Reset!
                   </h2>
-                  <p className="text-zinc-400">
+                  <p className="text-muted-foreground">
                     Your password has been successfully reset.
                   </p>
-                  <p className="text-sm text-zinc-500">
+                  <p className="text-sm text-muted-foreground">
                     Redirecting to login...
                   </p>
                 </div>
@@ -210,10 +201,10 @@ export default function ResetPasswordPage() {
             ) : (
               <>
                 <div className="text-center space-y-3 mb-6 lg:mb-8">
-                  <h2 className="text-xl lg:text-2xl font-bold text-white">
+                  <h2 className="text-xl lg:text-2xl font-bold text-foreground">
                     Reset Password
                   </h2>
-                  <p className="text-zinc-400 text-sm lg:text-base">
+                  <p className="text-muted-foreground text-sm lg:text-base">
                     Enter your new password for {email}
                   </p>
                 </div>
@@ -232,10 +223,11 @@ export default function ResetPasswordPage() {
                         placeholder="Enter your new password"
                         icon={<Lock className="h-4 w-4 text-zinc-500" />}
                         showPasswordToggle={true}
-                        className={`${errors.newPassword && touched.newPassword
-                          ? "border-red-500 focus:border-red-500 focus:ring-red-500/20"
-                          : ""
-                          }`}
+                        className={`${
+                          errors.newPassword && touched.newPassword
+                            ? "border-red-500 focus:border-red-500 focus:ring-red-500/20"
+                            : ""
+                        }`}
                       />
 
                       <FormikInput
@@ -245,10 +237,11 @@ export default function ResetPasswordPage() {
                         placeholder="Confirm your new password"
                         icon={<Lock className="h-4 w-4 text-zinc-500" />}
                         showPasswordToggle={true}
-                        className={`${errors.confirmPassword && touched.confirmPassword
-                          ? "border-red-500 focus:border-red-500 focus:ring-red-500/20"
-                          : ""
-                          }`}
+                        className={`${
+                          errors.confirmPassword && touched.confirmPassword
+                            ? "border-red-500 focus:border-red-500 focus:ring-red-500/20"
+                            : ""
+                        }`}
                       />
 
                       <Button
@@ -274,11 +267,11 @@ export default function ResetPasswordPage() {
                       </Button>
 
                       <div className="relative my-4">
-                        <Separator className="bg-zinc-700/50" />
+                        <Separator className="bg-border/80" />
                       </div>
 
                       <div className="text-center space-y-4">
-                        <p className="text-xs text-zinc-400">
+                        <p className="text-xs text-muted-foreground">
                           Remember your password?
                         </p>
                         <Link

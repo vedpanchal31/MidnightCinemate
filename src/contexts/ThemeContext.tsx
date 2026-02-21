@@ -29,16 +29,16 @@ interface ThemeProviderProps {
 
 export function ThemeProvider({ children }: ThemeProviderProps) {
   const dispatch = useDispatch();
-  const savedTheme =
-    typeof window !== "undefined"
-      ? (localStorage.getItem("theme") as Theme)
-      : null;
   const reduxTheme = useSelector(
     (state: RootState) => state.auth.preferences.theme,
   );
-  const initialTheme = savedTheme || reduxTheme || "dark";
-
-  const [theme, setThemeState] = useState<Theme>(initialTheme);
+  const [theme, setThemeState] = useState<Theme>(() => {
+    if (typeof window === "undefined") {
+      return reduxTheme || "dark";
+    }
+    const savedTheme = localStorage.getItem("theme") as Theme | null;
+    return savedTheme || reduxTheme || "dark";
+  });
 
   const applyTheme = (theme: Theme) => {
     const root = document.documentElement;
@@ -53,8 +53,8 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
   };
 
   useEffect(() => {
-    applyTheme(initialTheme);
-  }, []);
+    applyTheme(theme);
+  }, [theme]);
 
   const setTheme = (newTheme: Theme) => {
     setThemeState(newTheme);

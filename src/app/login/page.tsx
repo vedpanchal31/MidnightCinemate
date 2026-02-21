@@ -18,7 +18,6 @@ import { useLoginMutation } from "@/store/authApi";
 import { useDispatch } from "react-redux";
 import { loginSuccess, setEmail } from "@/store/authSlice";
 import { handleError } from "@/helpers/HelperFunction";
-import { ThemeToggle } from "@/components/ThemeToggle";
 
 export default function LoginPage() {
   const [login] = useLoginMutation();
@@ -76,7 +75,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex bg-black overflow-hidden">
+    <div className="min-h-screen flex bg-background text-foreground overflow-hidden">
       {/* Left Side - Hero Section */}
       <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden">
         {/* Background with gradient overlay */}
@@ -157,7 +156,7 @@ export default function LoginPage() {
       </div>
 
       {/* Right Side - Login Form */}
-      <div className="w-full lg:w-1/2 flex items-center justify-center p-6 lg:p-8 bg-gradient-to-br from-zinc-900 via-zinc-800 to-zinc-900 relative overflow-hidden">
+      <div className="w-full lg:w-1/2 flex items-center justify-center p-6 lg:p-8 bg-gradient-to-br from-background via-card to-background relative overflow-hidden">
         {/* Background decorative elements */}
         <div className="absolute inset-0">
           <div className="absolute top-0 right-0 w-96 h-96 bg-primary/20 rounded-full blur-3xl animate-pulse" />
@@ -180,17 +179,18 @@ export default function LoginPage() {
               <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center shadow-lg shadow-red-900/50 group-hover:scale-105 transition-transform">
                 <Film className="w-5 h-5 text-white" />
               </div>
-              <span className="text-xl font-bold text-white">Cinemate</span>
+              <span className="text-xl font-bold text-foreground">
+                Cinemate
+              </span>
             </Link>
-            <ThemeToggle />
           </div>
 
-          <div className="bg-zinc-900/60 border border-zinc-800/50 backdrop-blur-2xl shadow-2xl rounded-2xl p-6 lg:p-8">
+          <div className="bg-card/80 border border-border/70 backdrop-blur-2xl shadow-2xl rounded-2xl p-6 lg:p-8">
             <div className="text-center space-y-3 mb-6 lg:mb-8">
-              <h2 className="text-xl lg:text-2xl font-bold text-white">
+              <h2 className="text-xl lg:text-2xl font-bold text-foreground">
                 Welcome Back
               </h2>
-              <p className="text-zinc-400 text-sm lg:text-base">
+              <p className="text-muted-foreground text-sm lg:text-base">
                 Sign in to your account to continue
               </p>
             </div>
@@ -239,7 +239,7 @@ export default function LoginPage() {
                       />
                       <Label
                         htmlFor="remember"
-                        className="text-xs text-zinc-400"
+                        className="text-xs text-muted-foreground"
                       >
                         Remember me
                       </Label>
@@ -275,7 +275,7 @@ export default function LoginPage() {
 
                   <div className="relative my-4">
                     <Separator className="bg-zinc-700/50" />
-                    <span className="absolute left-1/2 top-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-zinc-900/60 px-3 text-xs text-zinc-500 font-medium">
+                    <span className="absolute left-1/2 top-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-card/80 px-3 text-xs text-muted-foreground font-medium">
                       OR CONTINUE WITH
                     </span>
                   </div>
@@ -284,7 +284,7 @@ export default function LoginPage() {
                     <Button
                       type="button"
                       variant="outline"
-                      className="bg-white/5 border-white/10 text-white hover:bg-white/10 hover:border-white/20 rounded-xl py-2.5 text-sm font-medium transform hover:scale-[1.02] transition-all duration-300 backdrop-blur-sm shadow-lg"
+                      className="bg-card/60 border-border/60 text-foreground hover:bg-accent/20 hover:border-border rounded-xl py-2.5 text-sm font-medium transform hover:scale-[1.02] transition-all duration-300 backdrop-blur-sm shadow-lg"
                     >
                       <span className="flex items-center justify-center gap-2">
                         <svg
@@ -303,7 +303,7 @@ export default function LoginPage() {
                     <Button
                       type="button"
                       variant="outline"
-                      className="bg-white/5 border-white/10 text-white hover:bg-white/10 hover:border-white/20 rounded-xl py-2.5 text-sm font-medium transform hover:scale-[1.02] transition-all duration-300 backdrop-blur-sm shadow-lg"
+                      className="bg-card/60 border-border/60 text-foreground hover:bg-accent/20 hover:border-border rounded-xl py-2.5 text-sm font-medium transform hover:scale-[1.02] transition-all duration-300 backdrop-blur-sm shadow-lg"
                     >
                       <span className="flex items-center justify-center gap-2">
                         <svg
