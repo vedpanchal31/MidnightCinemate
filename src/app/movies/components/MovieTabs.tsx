@@ -10,7 +10,14 @@ import {
   useGetHollywoodQuery,
 } from "@/store/moviesApi";
 import { ShimmerCard } from "@/components/ui/shimmer";
-import { Star, Clapperboard, Sparkles, Theater } from "lucide-react";
+import {
+  Star,
+  Clapperboard,
+  Sparkles,
+  Theater,
+  ChevronLeft,
+  ChevronRight,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Movie } from "@/store/moviesApi";
 
@@ -33,22 +40,27 @@ interface MovieTabsProps {
 
 export default function MovieTabs({ onTabChange }: MovieTabsProps) {
   const [activeTab, setActiveTab] = useState<TabType>("now-playing");
+  const [pages, setPages] = useState<Record<TabType, number>>({
+    "now-playing": 1,
+    hollywood: 1,
+    bollywood: 1,
+  });
 
   const {
     data: nowPlayingData,
     isLoading: isNowPlayingLoading,
     isFetching: isNowPlayingFetching,
-  } = useGetNowPlayingQuery();
+  } = useGetNowPlayingQuery(pages["now-playing"]);
   const {
     data: hindiData,
     isLoading: isHindiLoading,
     isFetching: isHindiFetching,
-  } = useGetHindiQuery();
+  } = useGetHindiQuery(pages.bollywood);
   const {
     data: hollywoodData,
     isLoading: isHollywoodLoading,
     isFetching: isHollywoodFetching,
-  } = useGetHollywoodQuery();
+  } = useGetHollywoodQuery(pages.hollywood);
 
   const hollywoodMovies = hollywoodData?.results ?? [];
   const bollywoodMovies = hindiData?.results ?? [];
@@ -71,6 +83,12 @@ export default function MovieTabs({ onTabChange }: MovieTabsProps) {
       count: bollywoodMovies.length,
     },
   ];
+
+  const totalPagesByTab: Record<TabType, number> = {
+    "now-playing": nowPlayingData?.total_pages ?? 1,
+    hollywood: hollywoodData?.total_pages ?? 1,
+    bollywood: hindiData?.total_pages ?? 1,
+  };
 
   const getMoviesForTab = (tab: TabType) => {
     switch (tab) {
@@ -99,6 +117,22 @@ export default function MovieTabs({ onTabChange }: MovieTabsProps) {
   };
 
   const currentMovies = getMoviesForTab(activeTab);
+  const currentPage = pages[activeTab];
+  const currentTotalPages = totalPagesByTab[activeTab];
+
+  const goToPreviousPage = () => {
+    setPages((prev) => ({
+      ...prev,
+      [activeTab]: Math.max(1, prev[activeTab] - 1),
+    }));
+  };
+
+  const goToNextPage = () => {
+    setPages((prev) => ({
+      ...prev,
+      [activeTab]: Math.min(currentTotalPages, prev[activeTab] + 1),
+    }));
+  };
 
   return (
     <div className="space-y-8">
@@ -331,6 +365,36 @@ export default function MovieTabs({ onTabChange }: MovieTabsProps) {
               </div>
             ))}
           </div>
+
+          {currentTotalPages > 1 && (
+            <div className="flex items-center justify-center gap-4 pt-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={goToPreviousPage}
+                disabled={currentPage <= 1 || isLoading}
+                className="flex items-center gap-2"
+              >
+                <ChevronLeft className="w-4 h-4" />
+                Previous
+              </Button>
+
+              <span className="text-sm text-zinc-400">
+                Page {currentPage} of {currentTotalPages}
+              </span>
+
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={goToNextPage}
+                disabled={currentPage >= currentTotalPages || isLoading}
+                className="flex items-center gap-2"
+              >
+                Next
+                <ChevronRight className="w-4 h-4" />
+              </Button>
+            </div>
+          )}
         </div>
       )}
     </div>

@@ -1,8 +1,6 @@
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import AuthButton from "@/components/AuthButton";
-import { ThemeToggle } from "@/components/ThemeToggle";
-import ProfileIcon from "@/components/ProfileIcon";
 
 export default function Home() {
   return (
@@ -14,8 +12,6 @@ export default function Home() {
             <span className="text-primary">Cine</span>mate
           </div>
           <div className="flex items-center gap-4">
-            <ThemeToggle />
-
             <AuthButton />
           </div>
         </div>

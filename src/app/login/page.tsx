@@ -18,7 +18,6 @@ import { useLoginMutation } from "@/store/authApi";
 import { useDispatch } from "react-redux";
 import { loginSuccess, setEmail } from "@/store/authSlice";
 import { handleError } from "@/helpers/HelperFunction";
-import { ThemeToggle } from "@/components/ThemeToggle";
 
 export default function LoginPage() {
   const [login] = useLoginMutation();
@@ -184,7 +183,6 @@ export default function LoginPage() {
                 Cinemate
               </span>
             </Link>
-            <ThemeToggle />
           </div>
 
           <div className="bg-card/80 border border-border/70 backdrop-blur-2xl shadow-2xl rounded-2xl p-6 lg:p-8">

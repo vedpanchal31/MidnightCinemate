@@ -54,11 +54,6 @@ export async function sendOTPEmail(
     const transporter = createTransporter();
 
     if (!transporter) {
-      // Fallback to mock email sending when SMTP is not configured
-      console.log(`[MOCK EMAIL] Sending email to ${email}:`);
-      console.log(`[MOCK EMAIL] Subject: ${subject}`);
-      console.log(`[MOCK EMAIL] OTP: ${otp}`);
-      console.log(`[MOCK EMAIL] Type: ${type}`);
       return true;
     }
 
@@ -70,27 +65,11 @@ export async function sendOTPEmail(
       html: htmlContent,
     };
 
-    console.log(`Sending email to ${email} via SMTP...`);
-    const info = await transporter.sendMail(mailOptions);
-
-    console.log("Email sent successfully:", {
-      messageId: info.messageId,
-      response: info.response,
-      to: email,
-      subject: subject,
-    });
+    await transporter.sendMail(mailOptions);
 
     return true;
   } catch (error) {
     console.error("Failed to send email:", error);
-
-    // Fallback to mock email on error
-    console.log(`[FALLBACK MOCK EMAIL] Sending email to ${email}:`);
-    console.log(
-      `[FALLBACK MOCK EMAIL] Subject: ${type === OTPType.EMAIL_VERIFICATION ? "Verify Your Cinemate Account" : "Reset Your Cinemate Password"}`,
-    );
-    console.log(`[FALLBACK MOCK EMAIL] OTP: ${otp}`);
-    console.log(`[FALLBACK MOCK EMAIL] Type: ${type}`);
 
     return true; // Still return true so the app continues working
   }

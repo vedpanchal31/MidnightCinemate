@@ -2,7 +2,6 @@ import MovieSearch from "./components/MovieSearch";
 import MovieTabs from "./components/MovieTabs";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { ThemeToggle } from "@/components/ThemeToggle";
 import ProfileIcon from "@/components/ProfileIcon";
 
 export default function MoviesPage() {
@@ -17,7 +16,6 @@ export default function MoviesPage() {
             </p>
           </div>
           <div className="flex items-center gap-4">
-            <ThemeToggle />
             <ProfileIcon />
             <Button asChild variant="outline">
               <Link href="/">Back to Home</Link>

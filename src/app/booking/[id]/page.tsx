@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useSelector } from "react-redux";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, X } from "lucide-react";
@@ -11,14 +11,16 @@ import {
   useGetMovieByIdQuery,
   useGetBookingsByMovieAndTimeQuery,
   useCreateBookingMutation,
+  useGetTimeSlotsByMovieQuery,
 } from "@/store/moviesApi";
 import { ShimmerText } from "@/components/ui/shimmer";
 import UnauthorizedBookingModal from "@/components/UnauthorizedBookingModal";
 import { RootState } from "@/store/store";
 import { AuthState } from "@/store/authSlice";
-import { formatDate, convertDateTimeToUTC } from "@/helpers/HelperFunction";
+import { formatDate } from "@/helpers/HelperFunction";
 import toast from "react-hot-toast";
 import moment from "moment";
+import { getScreenSeatLayout } from "@/data/screenLayouts";
 
 interface Seat {
   id: string;
@@ -50,18 +52,22 @@ const SEAT_TYPES = {
   },
 };
 
-// Generate dummy seats
-const generateSeats = (): Seat[] => {
+const generateSeats = (screenType: string): Seat[] => {
   const seats: Seat[] = [];
-  const rows = ["A", "B", "C", "D", "E", "F", "G", "H"];
+  const layout = getScreenSeatLayout(screenType);
+  const seatsPerRow = layout.blockSizes.reduce((sum, size) => sum + size, 0);
 
-  rows.forEach((row, rowIndex) => {
+  layout.rows.forEach((row, rowIndex) => {
+    const totalRows = layout.rows.length;
+    const vipStartIndex = totalRows - layout.vipRows;
+    const premiumStartIndex = vipStartIndex - layout.premiumRows;
     const type: "STANDARD" | "PREMIUM" | "VIP" =
-      rowIndex < 2 ? "VIP" : rowIndex < 5 ? "PREMIUM" : "STANDARD";
-    for (let i = 1; i <= 12; i++) {
-      // Add gap in middle
-      if (i === 5 || i === 9) continue;
-
+      rowIndex >= vipStartIndex
+        ? "VIP"
+        : rowIndex >= premiumStartIndex
+          ? "PREMIUM"
+          : "STANDARD";
+    for (let i = 1; i <= seatsPerRow; i++) {
       // Simple deterministic logic for demo purposes to avoid hydration mismatch
       const isReserved = false;
 
@@ -77,8 +83,6 @@ const generateSeats = (): Seat[] => {
   });
   return seats;
 };
-
-const INITIAL_SEATS = generateSeats();
 
 export default function BookingPage({
   params,
@@ -105,20 +109,46 @@ export default function BookingPage({
   const timeParam = searchParams.get("time");
   const slotId = searchParams.get("slotId");
 
-  // Prepare UTC date and time for API
-  const utcString =
-    dateParam && timeParam ? convertDateTimeToUTC(dateParam, timeParam) : "";
-  const utcDate = utcString ? utcString.split("T")[0] : "";
-  const utcTime = utcString ? utcString.split("T")[1].replace("Z", "") : "";
+  const { data: dayTimeSlots = [] } = useGetTimeSlotsByMovieQuery(
+    {
+      tmdb_movie_id: movieId ?? 0,
+      date_from: dateParam ?? undefined,
+      date_to: dateParam ?? undefined,
+    },
+    { skip: !movieId || !dateParam },
+  );
+
+  const selectedTimeSlot = useMemo(
+    () => dayTimeSlots.find((slot) => String(slot.id) === String(slotId)),
+    [dayTimeSlots, slotId],
+  );
+  const selectedScreenType = selectedTimeSlot?.screen_type ?? "2D";
+  const seatLayout = useMemo(
+    () => getScreenSeatLayout(selectedScreenType),
+    [selectedScreenType],
+  );
+  const aisleBreakSeatNumbers = useMemo(() => {
+    const breaks: number[] = [];
+    let running = 0;
+    seatLayout.blockSizes.slice(0, -1).forEach((size) => {
+      running += size;
+      breaks.push(running);
+    });
+    return breaks;
+  }, [seatLayout]);
+  const baseSeats = useMemo(
+    () => generateSeats(selectedScreenType),
+    [selectedScreenType],
+  );
 
   // Fetch already booked seats
   const { data: remoteBookings = [] } = useGetBookingsByMovieAndTimeQuery(
     {
       tmdb_movie_id: movieId ?? 0,
-      show_date: utcDate,
-      show_time: utcTime,
+      show_date: dateParam ?? "",
+      show_time: timeParam ?? "",
     },
-    { skip: !movieId || !utcDate || !utcTime },
+    { skip: !movieId || !dateParam || !timeParam },
   );
 
   const [createBooking, { isLoading: isBooking }] = useCreateBookingMutation();
@@ -126,10 +156,14 @@ export default function BookingPage({
   const bookedSeatIds = remoteBookings.map((b) => b.seat_id);
 
   // Derive seats with booking status
-  const seats = INITIAL_SEATS.map((seat) => ({
-    ...seat,
-    isBooked: bookedSeatIds.includes(seat.id),
-  }));
+  const seats = useMemo(
+    () =>
+      baseSeats.map((seat) => ({
+        ...seat,
+        isBooked: bookedSeatIds.includes(seat.id),
+      })),
+    [baseSeats, bookedSeatIds],
+  );
 
   // Extract movie ID from params
   useEffect(() => {
@@ -168,7 +202,7 @@ export default function BookingPage({
   };
 
   const totalPrice = selectedSeats.reduce((acc, seatId) => {
-    const seat = INITIAL_SEATS.find((s) => s.id === seatId);
+    const seat = baseSeats.find((s) => s.id === seatId);
     return acc + (seat?.price || 0);
   }, 0);
 
@@ -203,6 +237,14 @@ export default function BookingPage({
                 Fast Booking Active
               </span>
             </div>
+            <Button
+              asChild
+              variant="outline"
+              size="sm"
+              className="border-white/15 bg-white/5 hover:bg-white/10"
+            >
+              <Link href="/">Back to Home</Link>
+            </Button>
           </div>
         </div>
       </header>
@@ -240,17 +282,17 @@ export default function BookingPage({
             <span className="text-xs font-medium text-white">Selected</span>
           </div>
           <div className="flex items-center gap-3">
-            <div className="relative w-5 h-5 rounded-md bg-zinc-900 border border-white/5 flex items-center justify-center">
-              <X className="w-3 h-3 text-zinc-600" />
+            <div className="relative w-5 h-5 rounded-md bg-red-950/80 border border-red-500/50 flex items-center justify-center">
+              <X className="w-3 h-3 text-red-300" />
             </div>
-            <span className="text-xs font-medium text-zinc-500">Sold Out</span>
+            <span className="text-xs font-medium text-red-300">Sold Out</span>
           </div>
         </div>
 
         {/* Seat Grid */}
         <div className="w-full max-w-5xl mx-auto overflow-x-auto py-12 pb-24 custom-scrollbar">
           <div className="min-w-[600px] flex flex-col items-center gap-4">
-            {["A", "B", "C", "D", "E", "F", "G", "H"].map((row, rowIndex) => (
+            {seatLayout.rows.map((row, rowIndex) => (
               <div
                 key={row}
                 className={cn(
@@ -269,8 +311,11 @@ export default function BookingPage({
                       const isSelected = selectedSeats.includes(seat.id);
                       const isBooked = seat.isBooked;
 
-                      const marginClass =
-                        seat.number === 4 || seat.number === 8 ? "mr-10" : "";
+                      const marginClass = aisleBreakSeatNumbers.includes(
+                        seat.number,
+                      )
+                        ? "mr-10"
+                        : "";
 
                       return (
                         <button
@@ -281,7 +326,7 @@ export default function BookingPage({
                             "relative group w-9 h-9 md:w-10 md:h-10 rounded-xl transition-all duration-300",
                             marginClass,
                             isBooked
-                              ? "bg-zinc-950 cursor-not-allowed scale-90 grayscale opacity-40 border border-white/5"
+                              ? "bg-red-950/80 cursor-not-allowed border border-red-500/50 opacity-90 shadow-[0_0_12px_rgba(239,68,68,0.25)]"
                               : isSelected
                                 ? "bg-primary text-white scale-110 shadow-[0_0_25px_rgba(229,9,20,0.6)] ring-2 ring-primary/50 ring-offset-4 ring-offset-black z-10"
                                 : cn(
@@ -297,7 +342,7 @@ export default function BookingPage({
                           {/* Sold Out Visual Indicator */}
                           {isBooked && (
                             <div className="absolute inset-0 flex items-center justify-center">
-                              <X className="w-5 h-5 text-zinc-700 opacity-60" />
+                              <X className="w-5 h-5 text-red-300 opacity-90" />
                             </div>
                           )}
 

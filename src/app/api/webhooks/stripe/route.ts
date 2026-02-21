@@ -76,14 +76,11 @@ export async function POST(req: NextRequest) {
               );
             }
           }
-
-          console.log(`Booking confirmed for session ${session.id}`);
         }
       }
     } else if (event.type === "checkout.session.expired") {
       const session = event.data.object as Stripe.Checkout.Session;
       await updateBookingStatusBySession(session.id, BookingStatus.EXPIRED);
-      console.log(`Booking expired for session ${session.id}`);
     } else if (event.type === "payment_intent.payment_failed") {
       // Note: We'd need a way to map intent to session if we want to update by session,
       // or we can just let expired handle it if we don't have the mapping.

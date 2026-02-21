@@ -170,7 +170,8 @@ export interface Booking {
   tmdb_movie_id: number;
   show_date: string;
   show_time: string;
-  seat_id: string;
+  seat_id?: string;
+  seat_ids?: string[];
   price: number;
   status: BookingStatus;
   timeslot_id: string;

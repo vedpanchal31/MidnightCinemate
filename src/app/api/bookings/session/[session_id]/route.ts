@@ -48,11 +48,12 @@ export async function GET(
         mb.show_date,
         mb.show_time,
         mb.timeslot_id,
-        ARRAY_AGG(mb.seat_id ORDER BY mb.seat_id) AS seat_ids,
+        ARRAY_REMOVE(ARRAY_AGG(bs.seat_id ORDER BY bs.seat_id), NULL) AS seat_ids,
         SUM(mb.price)::numeric(10,2) AS amount,
         MIN(mb.status) AS status,
         MIN(mb.created_at) AS created_at
       FROM "MovieBooking" mb
+      LEFT JOIN "BookingSeat" bs ON bs.booking_id = mb.id
       WHERE mb.stripe_session_id = $1
       GROUP BY mb.user_id, mb.tmdb_movie_id, mb.show_date, mb.show_time, mb.timeslot_id
       ORDER BY MIN(mb.created_at) DESC
