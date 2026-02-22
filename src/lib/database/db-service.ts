@@ -877,7 +877,7 @@ export const updateBookingStatusBySession = async (
     await client.query("BEGIN");
     const result = await client.query(
       `UPDATE "MovieBooking" 
-       SET status = $2, stripe_payment_id = COALESCE($3, stripe_payment_id), updated_at = CURRENT_TIMESTAMP
+       SET status = $2, stripe_payment_id = COALESCE($3, stripe_payment_id), "updatedAt" = CURRENT_TIMESTAMP
        WHERE stripe_session_id = $1
        RETURNING id`,
       [sessionId, status, paymentId || null],
@@ -886,7 +886,7 @@ export const updateBookingStatusBySession = async (
     if (updatedIds.length > 0) {
       await client.query(
         `UPDATE "BookingSeat"
-         SET status = $1, updated_at = CURRENT_TIMESTAMP
+         SET status = $1, "updatedAt" = CURRENT_TIMESTAMP
          WHERE booking_id = ANY($2)`,
         [status, updatedIds],
       );
