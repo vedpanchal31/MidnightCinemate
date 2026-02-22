@@ -729,8 +729,8 @@ export const createBooking = async (
     }
 
     const bookingResult = await client.query(
-      `INSERT INTO "MovieBooking" (user_id, tmdb_movie_id, show_date, show_time, price, status, timeslot_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `INSERT INTO "MovieBooking" (user_id, tmdb_movie_id, show_date, show_time, price, status, timeslot_id, "createdAt", "updatedAt")
+       VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
        RETURNING *`,
       [
         bookingData.user_id || "guest",

@@ -90,8 +90,10 @@ const getSeatPreview = (seats: string[], limit: number = 4) => {
   };
 };
 
-const getStatusDetails = (status: number) => {
-  switch (status) {
+const getStatusDetails = (status: number | string) => {
+  const statusNum = typeof status === "string" ? parseInt(status, 10) : status;
+
+  switch (statusNum) {
     case BookingStatus.PENDING_PAYMENT:
       return {
         label: "Pending Payment",
