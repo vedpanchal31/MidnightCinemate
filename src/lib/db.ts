@@ -8,12 +8,20 @@ import { Pool } from "pg";
 const connectionString = process.env.DATABASE_URL;
 
 const poolConfig: any = connectionString
-  ? { connectionString }
+  ? {
+      connectionString,
+      ssl: connectionString.includes("supabase")
+        ? { rejectUnauthorized: false }
+        : false,
+    }
   : {
       user: process.env.DB_USER || "wappnet-07",
       host: process.env.DB_HOST || "localhost",
       port: parseInt(process.env.DB_PORT || "5432"),
       database: process.env.DB_NAME || "cinemate",
+      ssl: process.env.DB_HOST?.includes("supabase")
+        ? { rejectUnauthorized: false }
+        : false,
     };
 
 // Only add password if not using connection string and it's actually set
