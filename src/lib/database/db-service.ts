@@ -669,7 +669,9 @@ export const createBooking = async (
     }
 
     const slotDate = String(slot.slot_show_date);
-    const bookingDate = String(bookingData.show_date).slice(0, 10);
+    const bookingDate = new Date(String(bookingData.show_date))
+      .toISOString()
+      .slice(0, 10);
     if (slotDate !== bookingDate) {
       throw new Error("Selected date does not match the time slot");
     }
