@@ -88,9 +88,14 @@ export async function POST(req: NextRequest) {
     } else if (event.type === "checkout.session.expired") {
       const session = event.data.object as Stripe.Checkout.Session;
       await updateBookingStatusBySession(session.id, BookingStatus.EXPIRED);
-    } else if (event.type === "payment_intent.payment_failed") {
-      // Note: We'd need a way to map intent to session if we want to update by session,
-      // or we can just let expired handle it if we don't have the mapping.
+    } else if (event.type.startsWith("payment_method")) {
+      console.log(
+        "Payment method event received, but not processing booking status",
+      );
+    } else if (event.type.startsWith("payment_intent")) {
+      console.log("Payment intent event received:", event.type);
+    } else {
+      console.log("Unhandled webhook event type:", event.type);
     }
   } catch (err) {
     console.error("Error processing webhook event:", err);
