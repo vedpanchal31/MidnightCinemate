@@ -45,13 +45,20 @@ export async function POST(req: NextRequest) {
 
       // 2. Update Booking status to CONFIRMED
       if (session.payment_status === "paid") {
-        const success = await updateBookingStatusBySession(
-          session.id,
-          BookingStatus.CONFIRMED,
-          session.payment_intent as string,
-        );
+        console.log("Processing payment success for session:", session.id);
+        let updateSuccess = false;
+        try {
+          updateSuccess = await updateBookingStatusBySession(
+            session.id,
+            BookingStatus.CONFIRMED,
+            session.payment_intent as string,
+          );
+          console.log("Booking status update success:", updateSuccess);
+        } catch (error) {
+          console.error("Error updating booking status:", error);
+        }
 
-        if (success) {
+        if (updateSuccess) {
           // If the booking was pre-created, we might need to update availability here
           // if it wasn't done at creation/lock time.
           // But according to the new flow, we might want to do it in createBooking or here.
