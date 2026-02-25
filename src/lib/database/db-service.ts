@@ -204,8 +204,8 @@ const mapTimeslotRowToModel = async (
     price: Number(row.price ?? 12.99),
     screen_type: (screenType as TimeSlot["screen_type"]) || "2D",
     is_active: Boolean(row.isActive ?? row.is_active),
-    created_at: row.createdAt as Date,
-    updated_at: row.updatedAt as Date,
+    created_at: (row.created_at ?? row.createdAt) as Date,
+    updated_at: (row.updated_at ?? row.updatedAt) as Date,
   };
 };
 
@@ -395,7 +395,7 @@ export const ensureTimeSlotsForMovie = async (
        SELECT * FROM unnest($5::text[], $6::int[]) AS s(screen_type, total_seats)
      )
      INSERT INTO "Timeslot"
-       (tmdb_movie_id, show_date, "startTime", "endTime", screen_type, total_seats, available_seats, "isActive", "createdAt", "updatedAt")
+       (tmdb_movie_id, show_date, "startTime", "endTime", screen_type, total_seats, available_seats, "isActive", created_at, updated_at)
      SELECT
        $1,
        d.show_date,
@@ -438,7 +438,7 @@ export const createTimeSlot = async (
 ): Promise<TimeSlot> => {
   const result = await db.query(
     `INSERT INTO "Timeslot" 
-     (tmdb_movie_id, show_date, "startTime", "endTime", screen_type, total_seats, available_seats, "isActive", "createdAt", "updatedAt")
+     (tmdb_movie_id, show_date, "startTime", "endTime", screen_type, total_seats, available_seats, "isActive", created_at, updated_at)
      VALUES ($1, $2, $3, $4, $5, $6, $7, true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
      RETURNING *`,
     [
@@ -503,7 +503,7 @@ export const getTimeSlotsByMovie = async (
 
 export const getTimeSlotById = async (id: string): Promise<TimeSlot | null> => {
   const result = await db.query(
-    'SELECT * FROM "Timeslot" WHERE id = $1 AND isActive = true',
+    'SELECT * FROM "Timeslot" WHERE id = $1 AND "isActive" = true',
     [id],
   );
 
@@ -536,7 +536,7 @@ export const updateTimeSlot = async (
 
   if (updateFields.length === 0) return null;
 
-  updateFields.push(`"updatedAt" = CURRENT_TIMESTAMP`);
+  updateFields.push(`updated_at = CURRENT_TIMESTAMP`);
   values.push(id);
 
   const query = `UPDATE "Timeslot" SET ${updateFields.join(", ")} WHERE id = $${paramCount} RETURNING *`;
@@ -548,7 +548,7 @@ export const updateTimeSlot = async (
 
 export const deleteTimeSlot = async (id: string): Promise<boolean> => {
   const result = await db.query(
-    'UPDATE "Timeslot" SET "isActive" = false, "updatedAt" = CURRENT_TIMESTAMP WHERE id = $1',
+    'UPDATE "Timeslot" SET "isActive" = false, updated_at = CURRENT_TIMESTAMP WHERE id = $1',
     [id],
   );
   return result.rowCount ? result.rowCount > 0 : false;
@@ -560,7 +560,7 @@ export const updateAvailableSeats = async (
 ): Promise<TimeSlot | null> => {
   const result = await db.query(
     `UPDATE "Timeslot" 
-     SET available_seats = available_seats + $1, "updatedAt" = CURRENT_TIMESTAMP 
+     SET available_seats = available_seats + $1, updated_at = CURRENT_TIMESTAMP 
      WHERE id = $2 AND available_seats + $1 >= 0
      RETURNING *`,
     [seatsChange, id],
@@ -731,7 +731,7 @@ export const createBooking = async (
     }
 
     const bookingResult = await client.query(
-      `INSERT INTO "MovieBooking" (user_id, tmdb_movie_id, show_date, show_time, price, status, timeslot_id, "createdAt", "updatedAt")
+      `INSERT INTO "MovieBooking" (user_id, tmdb_movie_id, show_date, show_time, price, status, timeslot_id, created_at, updated_at)
        VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
        RETURNING *`,
       [
@@ -877,7 +877,7 @@ export const updateBookingStatusBySession = async (
     await client.query("BEGIN");
     const result = await client.query(
       `UPDATE "MovieBooking" 
-       SET status = $2, stripe_payment_id = COALESCE($3, stripe_payment_id), "updatedAt" = CURRENT_TIMESTAMP
+       SET status = $2, stripe_payment_id = COALESCE($3, stripe_payment_id)
        WHERE stripe_session_id = $1
        RETURNING id`,
       [sessionId, status, paymentId || null],
@@ -886,7 +886,7 @@ export const updateBookingStatusBySession = async (
     if (updatedIds.length > 0) {
       await client.query(
         `UPDATE "BookingSeat"
-         SET status = $1, "updatedAt" = CURRENT_TIMESTAMP
+         SET status = $1
          WHERE booking_id = ANY($2)`,
         [status, updatedIds],
       );
