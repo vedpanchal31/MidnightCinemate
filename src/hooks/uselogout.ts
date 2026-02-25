@@ -26,7 +26,7 @@ const useLogout = () => {
           icon: "⚠️",
         });
       } else {
-        toast.success(t(toastMessage ?? t("COMMON.LOGOUT.SUCCESSFUL")));
+        toast.success(t("COMMON.LOGOUT.SUCCESSFUL"));
       }
     }
 

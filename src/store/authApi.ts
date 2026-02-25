@@ -1,26 +1,26 @@
-import { createApi } from '@reduxjs/toolkit/query/react';
+import { createApi } from "@reduxjs/toolkit/query/react";
 import {
   SignUpRequest,
   LoginRequest,
+  LoginResponse,
   VerifyOTPRequest,
   ForgotPasswordRequest,
   ResendOTPRequest,
   ResetPasswordRequest,
-  LoginResponse,
   OTPResponse,
-} from '@/lib/database/schema';
-import { baseQuery } from '@/lib/api/baseQuery';
+} from "@/lib/database/schema";
+import { baseQuery } from "@/lib/api/baseQuery";
 
 export const authApi = createApi({
-  reducerPath: 'authApi',
+  reducerPath: "authApi",
   baseQuery: baseQuery,
-  tagTypes: ['Auth'],
+  tagTypes: ["Auth"],
   endpoints: (builder) => ({
     // Sign Up
     signUp: builder.mutation<OTPResponse, SignUpRequest>({
       query: (credentials) => ({
-        url: '/api/auth/signup',
-        method: 'POST',
+        url: "/api/auth/signup",
+        method: "POST",
         data: credentials,
       }),
     }),
@@ -28,17 +28,29 @@ export const authApi = createApi({
     // Login
     login: builder.mutation<LoginResponse, LoginRequest>({
       query: (credentials) => ({
-        url: '/api/auth/login',
-        method: 'POST',
+        url: "/api/auth/login",
+        method: "POST",
         data: credentials,
+      }),
+    }),
+
+    // Google Login
+    googleLogin: builder.mutation<
+      LoginResponse,
+      { idToken?: string; accessToken?: string }
+    >({
+      query: (payload) => ({
+        url: "/api/auth/google-login",
+        method: "POST",
+        data: payload,
       }),
     }),
 
     // Verify OTP
     verifyOTP: builder.mutation<OTPResponse, VerifyOTPRequest>({
       query: (data) => ({
-        url: '/api/auth/verify-otp',
-        method: 'POST',
+        url: "/api/auth/verify-otp",
+        method: "POST",
         data: data,
       }),
     }),
@@ -46,8 +58,8 @@ export const authApi = createApi({
     // Forgot Password
     forgotPassword: builder.mutation<OTPResponse, ForgotPasswordRequest>({
       query: (data) => ({
-        url: '/api/auth/forgot-password',
-        method: 'POST',
+        url: "/api/auth/forgot-password",
+        method: "POST",
         data: data,
       }),
     }),
@@ -55,17 +67,20 @@ export const authApi = createApi({
     // Resend OTP
     resendOTP: builder.mutation<OTPResponse, ResendOTPRequest>({
       query: (data) => ({
-        url: '/api/auth/resend-otp',
-        method: 'POST',
+        url: "/api/auth/resend-otp",
+        method: "POST",
         data: data,
       }),
     }),
 
     // Reset Password
-    resetPassword: builder.mutation<{ success: boolean; message: string }, ResetPasswordRequest>({
+    resetPassword: builder.mutation<
+      { success: boolean; message: string },
+      ResetPasswordRequest
+    >({
       query: (data) => ({
-        url: '/api/auth/reset-password',
-        method: 'POST',
+        url: "/api/auth/reset-password",
+        method: "POST",
         data: data,
       }),
     }),
@@ -76,6 +91,7 @@ export const authApi = createApi({
 export const {
   useSignUpMutation,
   useLoginMutation,
+  useGoogleLoginMutation,
   useVerifyOTPMutation,
   useForgotPasswordMutation,
   useResendOTPMutation,
