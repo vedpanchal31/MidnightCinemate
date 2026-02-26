@@ -177,11 +177,11 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
--- User table trigger function (uses camelCase columns)
+-- User table trigger function (uses snake_case columns)
 CREATE OR REPLACE FUNCTION update_user_timestamp_column()
 RETURNS TRIGGER AS $$
 BEGIN
-    NEW."updatedAt" = CURRENT_TIMESTAMP;
+    NEW.updated_at = CURRENT_TIMESTAMP;
     RETURN NEW;
 END;
 $$ language 'plpgsql';
