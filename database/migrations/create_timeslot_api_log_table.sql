@@ -1,6 +1,6 @@
 -- Ensure no duplicate slots per movie/date/time/screen
 CREATE UNIQUE INDEX IF NOT EXISTS idx_timeslot_movie_date_time_screen_unique
-ON "Timeslot"(tmdb_movie_id, show_date, "startTime", screen_type)
+ON "Timeslot"(tmdb_movie_id, show_date, start_time, screen_type)
 WHERE tmdb_movie_id IS NOT NULL;
 
 -- Track time-slot API activity and outcomes

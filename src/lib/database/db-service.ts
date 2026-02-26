@@ -197,7 +197,7 @@ const mapTimeslotRowToModel = async (
     id: String(row.id),
     tmdb_movie_id: tmdbMovieId,
     show_date: await formatDbDate((row.show_date as string | Date) ?? ""),
-    show_time: String(row.startTime ?? row.show_time),
+    show_time: String(row.start_time ?? row.show_time),
     total_seats: totalSeats,
     available_seats: normalizedAvailableSeats,
     booked_seats: normalizedBookedSeats,
@@ -212,7 +212,7 @@ const mapTimeslotRowToModel = async (
 export const ensureTimeSlotInfrastructure = async (): Promise<void> => {
   await db.query(`
     CREATE UNIQUE INDEX IF NOT EXISTS idx_timeslot_movie_date_time_screen_unique
-    ON "Timeslot"(tmdb_movie_id, show_date, "startTime", screen_type)
+    ON "Timeslot"(tmdb_movie_id, show_date, start_time, screen_type)
     WHERE tmdb_movie_id IS NOT NULL;
   `);
 
@@ -395,7 +395,7 @@ export const ensureTimeSlotsForMovie = async (
        SELECT * FROM unnest($5::text[], $6::int[]) AS s(screen_type, total_seats)
      )
      INSERT INTO "Timeslot"
-       (tmdb_movie_id, show_date, "startTime", "endTime", screen_type, total_seats, available_seats, "isActive", created_at, updated_at)
+       (tmdb_movie_id, show_date, start_time, end_time, screen_type, total_seats, available_seats, is_active, created_at, updated_at)
      SELECT
        $1,
        d.show_date,
@@ -415,7 +415,7 @@ export const ensureTimeSlotsForMovie = async (
        FROM "Timeslot" existing
        WHERE existing.tmdb_movie_id = $1
          AND existing.show_date = d.show_date
-         AND existing."startTime" = t.show_time
+         AND existing.start_time = t.show_time
          AND existing.screen_type = s.screen_type
      )
      RETURNING id`,
@@ -438,7 +438,7 @@ export const createTimeSlot = async (
 ): Promise<TimeSlot> => {
   const result = await db.query(
     `INSERT INTO "Timeslot" 
-     (tmdb_movie_id, show_date, "startTime", "endTime", screen_type, total_seats, available_seats, "isActive", created_at, updated_at)
+     (tmdb_movie_id, show_date, start_time, end_time, screen_type, total_seats, available_seats, is_active, created_at, updated_at)
      VALUES ($1, $2, $3, $4, $5, $6, $7, true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
      RETURNING *`,
     [
@@ -471,7 +471,7 @@ export const getTimeSlotsByMovie = async (
       WHERE status IN ($2, $3)
       GROUP BY timeslot_id, tmdb_movie_id
     ) b ON t.id = b.timeslot_id AND b.tmdb_movie_id = $1
-    WHERE t."isActive" = true AND t.tmdb_movie_id = $1
+    WHERE t.is_active = true AND t.tmdb_movie_id = $1
   `;
   const params: (string | number)[] = [
     tmdb_movie_id,
@@ -492,7 +492,7 @@ export const getTimeSlotsByMovie = async (
     paramCount++;
   }
 
-  query += ` ORDER BY t.show_date, t."startTime"`;
+  query += ` ORDER BY t.show_date, t.start_time`;
 
   const result = await db.query(query, params);
 
@@ -503,7 +503,7 @@ export const getTimeSlotsByMovie = async (
 
 export const getTimeSlotById = async (id: string): Promise<TimeSlot | null> => {
   const result = await db.query(
-    'SELECT * FROM "Timeslot" WHERE id = $1 AND "isActive" = true',
+    'SELECT * FROM "Timeslot" WHERE id = $1 AND is_active = true',
     [id],
   );
 
@@ -523,9 +523,9 @@ export const updateTimeSlot = async (
   Object.entries(updates).forEach(([key, value]) => {
     if (value !== undefined) {
       if (key === "show_time") {
-        updateFields.push(`"startTime" = $${paramCount}`);
+        updateFields.push(`start_time = $${paramCount}`);
       } else if (key === "is_active") {
-        updateFields.push(`"isActive" = $${paramCount}`);
+        updateFields.push(`is_active = $${paramCount}`);
       } else {
         updateFields.push(`"${key}" = $${paramCount}`);
       }
@@ -548,7 +548,7 @@ export const updateTimeSlot = async (
 
 export const deleteTimeSlot = async (id: string): Promise<boolean> => {
   const result = await db.query(
-    'UPDATE "Timeslot" SET "isActive" = false, updated_at = CURRENT_TIMESTAMP WHERE id = $1',
+    'UPDATE "Timeslot" SET is_active = false, updated_at = CURRENT_TIMESTAMP WHERE id = $1',
     [id],
   );
   return result.rowCount ? result.rowCount > 0 : false;
@@ -583,7 +583,7 @@ export const getAllTimeSlots = async (
       WHERE status IN ($1, $2)
       GROUP BY timeslot_id, tmdb_movie_id
     ) b ON t.id = b.timeslot_id AND b.tmdb_movie_id = t.tmdb_movie_id
-    WHERE t."isActive" = true
+    WHERE t.is_active = true
   `;
   const params: (string | number)[] = [
     BookingStatus.CONFIRMED,
@@ -617,7 +617,7 @@ export const getAllTimeSlots = async (
     }
   }
 
-  sql += ` ORDER BY t.tmdb_movie_id, t.show_date, t."startTime", t.screen_type`;
+  sql += ` ORDER BY t.tmdb_movie_id, t.show_date, t.start_time, t.screen_type`;
 
   const result = await db.query(sql, params);
 
@@ -643,12 +643,12 @@ export const createBooking = async (
          id,
          tmdb_movie_id,
          show_date,
-         "startTime",
+         start_time,
          screen_type,
          total_seats,
-         "isActive",
+         is_active,
          to_char(show_date, 'YYYY-MM-DD') AS slot_show_date,
-         to_char("startTime", 'HH24:MI') AS slot_show_time
+         to_char(start_time, 'HH24:MI') AS slot_show_time
        FROM "Timeslot"
        WHERE id = $1
        FOR UPDATE`,
@@ -660,7 +660,7 @@ export const createBooking = async (
     }
 
     const slot = slotResult.rows[0];
-    if (!slot.isActive) {
+    if (!slot.is_active) {
       throw new Error("Selected time slot is not active");
     }
 

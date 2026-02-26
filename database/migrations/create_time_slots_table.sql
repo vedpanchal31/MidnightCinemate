@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS "Timeslot" (
 -- Create indexes for better performance
 CREATE INDEX IF NOT EXISTS idx_timeslot_tmdb_movie_id ON "Timeslot"(tmdb_movie_id);
 CREATE INDEX IF NOT EXISTS idx_timeslot_show_date ON "Timeslot"(show_date);
-CREATE INDEX IF NOT EXISTS "idx_timeslot_active" ON "Timeslot"("isActive") WHERE "isActive" = true;
+CREATE INDEX IF NOT EXISTS idx_timeslot_active ON "Timeslot"(is_active) WHERE is_active = true;
 CREATE INDEX IF NOT EXISTS "idx_timeslot_screen_type" ON "Timeslot"(screen_type);
 
 -- Add constraints
@@ -28,11 +28,11 @@ ALTER TABLE "Timeslot" DROP CONSTRAINT IF EXISTS check_total_seats;
 ALTER TABLE "Timeslot" ADD CONSTRAINT check_timeslot_total_seats 
     CHECK (total_seats > 0);
 
--- Trigger for updatedAt
+-- Trigger for updated_at
 CREATE OR REPLACE FUNCTION update_updated_at_column()
 RETURNS TRIGGER AS $$
 BEGIN
-    NEW."updatedAt" = CURRENT_TIMESTAMP;
+    NEW.updated_at = CURRENT_TIMESTAMP;
     RETURN NEW;
 END;
 $$ language 'plpgsql';
