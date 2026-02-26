@@ -23,8 +23,8 @@ export interface User {
   reset_token?: string;
   reset_token_expires?: Date;
   last_login?: Date;
-  createdAt: Date;
-  updatedAt: Date;
+  created_at: Date;
+  updated_at: Date;
 }
 
 export interface OTP {
@@ -53,7 +53,7 @@ export const createUser = async (userData: {
   phone?: string;
 }): Promise<User> => {
   const result = await db.query(
-    `INSERT INTO "User" (email, password, name, phone, "is_email_verified", "is_active", "createdAt", "updatedAt")
+    `INSERT INTO "User" (email, password, name, phone, "is_email_verified", "is_active", created_at, updated_at)
      VALUES ($1, $2, $3, $4, false, true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
      RETURNING *`,
     [userData.email, userData.password, userData.name, userData.phone || null],
@@ -81,7 +81,7 @@ export const updateUser = async (
   if (updateFields.length === 0) return false;
 
   // Always update updatedAt
-  updateFields.push(`"updatedAt" = CURRENT_TIMESTAMP`);
+  updateFields.push(`updated_at = CURRENT_TIMESTAMP`);
   values.push(email);
 
   const query = `UPDATE "User" SET ${updateFields.join(", ")} WHERE email = $${paramCount}`;
