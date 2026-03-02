@@ -5,8 +5,10 @@ import {
   markNotificationRead,
   deleteAllNotifications,
   deleteNotification,
+  getUnreadNotificationCount,
 } from "@/lib/database/db-service";
 import { verifyJWTToken } from "@/lib/utils/auth";
+import { getPusherServer } from "@/lib/pusher/server";
 
 const getAuthorizedUserId = (request: NextRequest) => {
   const authHeader = request.headers.get("authorization");
@@ -104,6 +106,18 @@ export async function PATCH(request: NextRequest) {
 
     if (delete_all) {
       const deleted = await deleteAllNotifications(user_id);
+      const pusher = getPusherServer();
+      if (pusher) {
+        const unread = await getUnreadNotificationCount(user_id);
+        await pusher.trigger(`notifications-${user_id}`, "notification:count", {
+          unread_count: unread,
+        });
+        await pusher.trigger(
+          `notifications-${user_id}`,
+          "notification:changed",
+          { type: "delete_all" },
+        );
+      }
       return NextResponse.json({
         success: true,
         deleted,
@@ -121,6 +135,18 @@ export async function PATCH(request: NextRequest) {
       }
 
       const deleted = await deleteNotification(user_id, notification_id);
+      const pusher = getPusherServer();
+      if (pusher) {
+        const unread = await getUnreadNotificationCount(user_id);
+        await pusher.trigger(`notifications-${user_id}`, "notification:count", {
+          unread_count: unread,
+        });
+        await pusher.trigger(
+          `notifications-${user_id}`,
+          "notification:changed",
+          { type: "delete_one", notification_id },
+        );
+      }
       return NextResponse.json({
         success: true,
         deleted,
@@ -130,6 +156,18 @@ export async function PATCH(request: NextRequest) {
 
     if (mark_all) {
       const updated = await markAllNotificationsRead(user_id);
+      const pusher = getPusherServer();
+      if (pusher) {
+        const unread = await getUnreadNotificationCount(user_id);
+        await pusher.trigger(`notifications-${user_id}`, "notification:count", {
+          unread_count: unread,
+        });
+        await pusher.trigger(
+          `notifications-${user_id}`,
+          "notification:changed",
+          { type: "mark_all" },
+        );
+      }
       return NextResponse.json({
         success: true,
         updated,
@@ -148,6 +186,17 @@ export async function PATCH(request: NextRequest) {
     }
 
     const updated = await markNotificationRead(user_id, notification_id);
+    const pusher = getPusherServer();
+    if (pusher) {
+      const unread = await getUnreadNotificationCount(user_id);
+      await pusher.trigger(`notifications-${user_id}`, "notification:count", {
+        unread_count: unread,
+      });
+      await pusher.trigger(`notifications-${user_id}`, "notification:changed", {
+        type: "mark_one",
+        notification_id,
+      });
+    }
     return NextResponse.json({
       success: true,
       updated,

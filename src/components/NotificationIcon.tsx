@@ -10,8 +10,8 @@ import {
   notificationsApi,
   useGetUnreadCountQuery,
 } from "@/store/notificationsApi";
-import { getSupabaseClient } from "@/lib/supabase/client";
 import { getSocket, disconnectSocket } from "@/lib/socket/client";
+import { getPusherClient } from "@/lib/pusher/client";
 
 export default function NotificationIcon() {
   const router = useRouter();
@@ -32,6 +32,7 @@ export default function NotificationIcon() {
 
     let isMounted = true;
     const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL;
+    const pusherKey = process.env.NEXT_PUBLIC_PUSHER_KEY;
 
     if (socketUrl) {
       const socket = getSocket(user.id);
@@ -58,27 +59,63 @@ export default function NotificationIcon() {
       };
     }
 
-    const supabase = getSupabaseClient();
-    const channel = supabase
-      .channel(`notifications:${user.id}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "Notification",
-          filter: `user_id=eq.${user.id}`,
-        },
-        () => {
-          if (!isMounted) return;
-          refetch();
-        },
-      )
-      .subscribe();
+    if (pusherKey) {
+      const pusher = getPusherClient();
+      if (!pusher) return;
+      const channelName = `notifications-${user.id}`;
+      const channel = pusher.subscribe(channelName);
+      const handleCount = (payload: { unread_count?: number }) => {
+        if (!isMounted) return;
+        try {
+          dispatch(
+            notificationsApi.util.upsertQueryData(
+              "getUnreadCount",
+              { user_id: user.id },
+              Number(payload?.unread_count || 0),
+            ),
+          );
+        } catch (error) {
+          console.error("Failed to update unread count:", error);
+        }
+      };
+      const handleChange = () => {
+        if (!isMounted) return;
+        refetch();
+      };
+      channel.bind("notification:count", handleCount);
+      channel.bind("notification:changed", handleChange);
+      channel.bind("notification:new", handleChange);
+
+      return () => {
+        isMounted = false;
+        channel.unbind("notification:count", handleCount);
+        channel.unbind("notification:changed", handleChange);
+        channel.unbind("notification:new", handleChange);
+        pusher.unsubscribe(channelName);
+      };
+    }
+
+    const socket = getSocket(user.id);
+    const handleCount = (payload: { unread_count: number }) => {
+      if (!isMounted) return;
+      try {
+        dispatch(
+          notificationsApi.util.upsertQueryData(
+            "getUnreadCount",
+            { user_id: user.id },
+            Number(payload?.unread_count || 0),
+          ),
+        );
+      } catch (error) {
+        console.error("Failed to update unread count:", error);
+      }
+    };
+
+    socket.on("notification:count", handleCount);
 
     return () => {
       isMounted = false;
-      supabase.removeChannel(channel);
+      socket.off("notification:count", handleCount);
     };
   }, [dispatch, isAuthenticated, refetch, user?.id]);
 
