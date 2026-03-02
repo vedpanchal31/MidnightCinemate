@@ -12,6 +12,7 @@ import {
 } from "./schema";
 import { getScreenTypeCapacity, type ScreenType } from "@/data/screenLayouts";
 import { getIO } from "@/lib/socket/io";
+import { getPusherServer } from "@/lib/pusher/server";
 
 export interface User {
   id: string;
@@ -1170,6 +1171,23 @@ export const createNotification = async (payload: {
     io.to(`user:${payload.user_id}`).emit("notification:count", {
       unread_count: unread,
     });
+  }
+  const pusher = getPusherServer();
+  if (pusher) {
+    const unread = await getUnreadNotificationCount(payload.user_id);
+    await pusher.trigger(
+      `notifications-${payload.user_id}`,
+      "notification:new",
+      {
+        notification,
+        unread_count: unread,
+      },
+    );
+    await pusher.trigger(
+      `notifications-${payload.user_id}`,
+      "notification:count",
+      { unread_count: unread },
+    );
   }
 
   return notification;

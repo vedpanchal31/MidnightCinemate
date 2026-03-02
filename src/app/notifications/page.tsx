@@ -11,10 +11,12 @@ import {
   useDeleteAllMutation,
   useDeleteOneMutation,
   useGetNotificationsQuery,
+  useGetUnreadCountQuery,
   useMarkAllReadMutation,
   useMarkReadMutation,
 } from "@/store/notificationsApi";
 import { showToast } from "@/lib/toast";
+import { getPusherClient } from "@/lib/pusher/client";
 
 type NotificationRow = {
   id: number;
@@ -39,8 +41,16 @@ export default function NotificationsPage() {
   const [movieTitles, setMovieTitles] = React.useState<Record<number, string>>(
     {},
   );
-  const { data: items = [], isFetching: isLoading } = useGetNotificationsQuery(
+  const {
+    data: items = [],
+    isFetching: isLoading,
+    refetch,
+  } = useGetNotificationsQuery(
     { user_id: user?.id || "", limit: 50, offset: 0 },
+    { skip: !isAuthenticated || !user?.id },
+  );
+  const { refetch: refetchUnread } = useGetUnreadCountQuery(
+    { user_id: user?.id || "" },
     { skip: !isAuthenticated || !user?.id },
   );
   const unreadCount = items.filter((item) => !item.is_read).length;
@@ -49,6 +59,38 @@ export default function NotificationsPage() {
   const [markAllReadMutation] = useMarkAllReadMutation();
   const [deleteOneMutation] = useDeleteOneMutation();
   const [deleteAllMutation] = useDeleteAllMutation();
+
+  React.useEffect(() => {
+    if (!isAuthenticated || !user?.id) return;
+    let isMounted = true;
+    const pusherKey = process.env.NEXT_PUBLIC_PUSHER_KEY;
+
+    if (pusherKey) {
+      const pusher = getPusherClient();
+      if (!pusher) return;
+      const channelName = `notifications-${user.id}`;
+      const channel = pusher.subscribe(channelName);
+      const handleChange = () => {
+        if (!isMounted) return;
+        refetch();
+        refetchUnread();
+      };
+      channel.bind("notification:changed", handleChange);
+      channel.bind("notification:new", handleChange);
+      channel.bind("notification:count", handleChange);
+
+      return () => {
+        isMounted = false;
+        channel.unbind("notification:changed", handleChange);
+        channel.unbind("notification:new", handleChange);
+        channel.unbind("notification:count", handleChange);
+        pusher.unsubscribe(channelName);
+      };
+    }
+    return () => {
+      isMounted = false;
+    };
+  }, [isAuthenticated, refetch, refetchUnread, user?.id]);
 
   React.useEffect(() => {
     const ids = Array.from(
@@ -178,7 +220,19 @@ export default function NotificationsPage() {
           </div>
         </div>
         {isLoading ? (
-          <p className="text-sm text-muted-foreground">Loading…</p>
+          <div className="space-y-4">
+            {[1, 2, 3].map((i) => (
+              <div
+                key={i}
+                className="rounded-2xl border border-white/10 bg-white/5 p-5 animate-pulse"
+              >
+                <div className="h-3 w-28 bg-white/10 rounded" />
+                <div className="mt-3 h-5 w-2/3 bg-white/10 rounded" />
+                <div className="mt-2 h-4 w-3/4 bg-white/5 rounded" />
+                <div className="mt-4 h-6 w-24 bg-white/10 rounded-full" />
+              </div>
+            ))}
+          </div>
         ) : items.length === 0 ? (
           <div className="rounded-2xl border border-white/10 bg-white/5 p-10 text-center text-muted-foreground">
             No notifications yet.
