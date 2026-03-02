@@ -1,6 +1,5 @@
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import AuthButton from "@/components/AuthButton";
 
 export default function Home() {
   return (
@@ -11,9 +10,7 @@ export default function Home() {
           <div className="text-2xl font-bold">
             <span className="text-primary">Cine</span>mate
           </div>
-          <div className="flex items-center gap-4">
-            <AuthButton />
-          </div>
+          <div />
         </div>
       </nav>
 

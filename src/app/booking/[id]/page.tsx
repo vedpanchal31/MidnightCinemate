@@ -237,14 +237,6 @@ export default function BookingPage({
                 Fast Booking Active
               </span>
             </div>
-            <Button
-              asChild
-              variant="outline"
-              size="sm"
-              className="border-white/15 bg-white/5 hover:bg-white/10"
-            >
-              <Link href="/">Back to Home</Link>
-            </Button>
           </div>
         </div>
       </header>
