@@ -1,20 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import {
-  expirePendingBookingsBeforeShow,
-  getBookingsByUser,
-} from "@/lib/database/db-service";
+import { getRefundsByUser } from "@/lib/database/db-service";
 import { verifyJWTToken } from "@/lib/utils/auth";
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> },
-) {
+export async function GET(request: NextRequest) {
   try {
-    const { id } = await params;
+    const { searchParams } = new URL(request.url);
+    const user_id = searchParams.get("user_id");
 
-    if (!id) {
+    if (!user_id) {
       return NextResponse.json(
-        { success: false, message: "User ID is required" },
+        { success: false, message: "user_id is required" },
         { status: 400 },
       );
     }
@@ -38,23 +33,21 @@ export async function GET(
       );
     }
 
-    if (payload.userId !== id) {
+    if (payload.userId !== user_id) {
       return NextResponse.json(
         { success: false, message: "Forbidden" },
         { status: 403 },
       );
     }
 
-    await expirePendingBookingsBeforeShow();
-    const bookings = await getBookingsByUser(id);
-
+    const bookings = await getRefundsByUser(user_id);
     return NextResponse.json({
       success: true,
-      message: "User bookings retrieved successfully",
+      message: "Refunds retrieved successfully",
       data: bookings,
     });
   } catch (error) {
-    console.error("Error fetching user bookings:", error);
+    console.error("Error fetching refunds:", error);
     return NextResponse.json(
       { success: false, message: "Internal server error" },
       { status: 500 },

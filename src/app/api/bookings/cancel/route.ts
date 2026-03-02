@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { db } from "@/lib/db";
 import { BookingStatus } from "@/lib/database/schema";
+import { createNotification } from "@/lib/database/db-service";
 
 const stripe = process.env.STRIPE_SECRET_KEY
   ? new Stripe(process.env.STRIPE_SECRET_KEY)
@@ -96,6 +97,10 @@ export async function POST(request: NextRequest) {
         (refundAmountByPaymentIntent.get(paymentIntent) || 0) + seatPricePaise,
       );
     });
+    const refundedTotalAmount = confirmedBookings.reduce(
+      (sum, booking) => sum + Number(booking.price || 0),
+      0,
+    );
 
     for (const [
       paymentIntent,
@@ -123,6 +128,21 @@ export async function POST(request: NextRequest) {
          WHERE booking_id = ANY($2)`,
         [BookingStatus.REFUNDED, refundedBookingIds],
       );
+
+      await createNotification({
+        user_id,
+        type: "booking_refunded",
+        title: "Booking Refunded",
+        message: `Your refund has been processed for ${refundedBookingIds.length} booking(s).`,
+        data: { booking_ids: refundedBookingIds, amount: refundedTotalAmount },
+      });
+      await createNotification({
+        user_id,
+        type: "seats_available",
+        title: "Seats Available",
+        message: "Refunded seats are now available for rebooking.",
+        data: { booking_ids: refundedBookingIds },
+      });
     }
 
     if (pendingBookingIds.length > 0) {
@@ -139,6 +159,21 @@ export async function POST(request: NextRequest) {
          WHERE booking_id = ANY($2)`,
         [BookingStatus.CANCELLED, pendingBookingIds],
       );
+
+      await createNotification({
+        user_id,
+        type: "booking_cancelled",
+        title: "Booking Cancelled",
+        message: `Your booking has been cancelled (${pendingBookingIds.length} ticket(s)).`,
+        data: { booking_ids: pendingBookingIds },
+      });
+      await createNotification({
+        user_id,
+        type: "seats_available",
+        title: "Seats Available",
+        message: "Cancelled seats are now available for rebooking.",
+        data: { booking_ids: pendingBookingIds },
+      });
     }
 
     return NextResponse.json({

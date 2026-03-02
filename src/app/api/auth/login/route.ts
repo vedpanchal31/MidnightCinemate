@@ -16,6 +16,7 @@ import {
   findUserByEmail,
   updateUser,
   createOTP,
+  createNotification,
 } from "@/lib/database/db-service";
 import { OTPType } from "@/data/constants";
 
@@ -134,8 +135,19 @@ export async function POST(request: Request) {
 
     const refreshToken = generateRefreshToken(user.id);
 
+    const isFirstLogin = !user.last_login;
     // Update last login
     await updateUser(body.email, { last_login: new Date() });
+
+    if (isFirstLogin && user.is_email_verified) {
+      await createNotification({
+        user_id: user.id,
+        type: "welcome",
+        title: "Welcome to Cinemate",
+        message: `Welcome ${user.name}! Your account is verified and ready to book.`,
+        data: { user_id: user.id },
+      });
+    }
 
     const response: LoginResponse = {
       success: true,

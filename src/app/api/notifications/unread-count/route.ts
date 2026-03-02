@@ -1,20 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import {
-  expirePendingBookingsBeforeShow,
-  getBookingsByUser,
-} from "@/lib/database/db-service";
+import { getUnreadNotificationCount } from "@/lib/database/db-service";
 import { verifyJWTToken } from "@/lib/utils/auth";
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> },
-) {
+export async function GET(request: NextRequest) {
   try {
-    const { id } = await params;
-
-    if (!id) {
+    const { searchParams } = new URL(request.url);
+    const user_id = searchParams.get("user_id");
+    if (!user_id) {
       return NextResponse.json(
-        { success: false, message: "User ID is required" },
+        { success: false, message: "user_id is required" },
         { status: 400 },
       );
     }
@@ -38,23 +32,17 @@ export async function GET(
       );
     }
 
-    if (payload.userId !== id) {
+    if (payload.userId !== user_id) {
       return NextResponse.json(
         { success: false, message: "Forbidden" },
         { status: 403 },
       );
     }
 
-    await expirePendingBookingsBeforeShow();
-    const bookings = await getBookingsByUser(id);
-
-    return NextResponse.json({
-      success: true,
-      message: "User bookings retrieved successfully",
-      data: bookings,
-    });
+    const count = await getUnreadNotificationCount(user_id);
+    return NextResponse.json({ success: true, unread_count: count });
   } catch (error) {
-    console.error("Error fetching user bookings:", error);
+    console.error("Error fetching notification count:", error);
     return NextResponse.json(
       { success: false, message: "Internal server error" },
       { status: 500 },

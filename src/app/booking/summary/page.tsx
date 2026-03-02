@@ -12,54 +12,148 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import toast from "react-hot-toast";
+import moment from "moment";
 import { Button } from "@/components/ui/button";
 import {
   useCreateCheckoutSessionMutation,
   useGetMovieByIdQuery,
+  useGetBookingSummaryQuery,
 } from "@/store/moviesApi";
 import { convertDateTimeToUTC, formatDate } from "@/helpers/HelperFunction";
 import { useSelector } from "react-redux";
 import { RootState } from "@/store/store";
 import { AuthState } from "@/store/authSlice";
 import { cn } from "@/lib/utils";
+import { BookingStatus } from "@/lib/database/schema";
 
 export default function BookingSummaryPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user } = useSelector((state: RootState) => state.auth as AuthState);
 
-  const movieId = Number(searchParams.get("movieId") || 0);
-  const date = searchParams.get("date") || "";
-  const time = searchParams.get("time") || "";
-  const slotId = searchParams.get("slotId") || "";
-  const seats = (searchParams.get("seats") || "")
+  const movieIdParam = Number(searchParams.get("movieId") || 0);
+  const dateParam = searchParams.get("date") || "";
+  const timeParam = searchParams.get("time") || "";
+  const normalizedTimeParam = timeParam.includes("T")
+    ? timeParam.split("T")[1]
+    : timeParam;
+  const dateMomentParam = dateParam ? moment(dateParam) : null;
+  const slotIdParam = searchParams.get("slotId") || "";
+  const seatsParam = (searchParams.get("seats") || "")
     .split(",")
     .map((seat) => seat.trim())
     .filter(Boolean);
-  const amount = Number(searchParams.get("amount") || 0);
+  const amountParam = Number(searchParams.get("amount") || 0);
+  const statusParam = searchParams.get("status");
+  const parsedStatus = Number(statusParam);
+  const bookingStatusParam = Number.isNaN(parsedStatus)
+    ? BookingStatus.PENDING_PAYMENT
+    : parsedStatus;
   const bookingIds = (searchParams.get("bookingIds") || "")
     .split(",")
     .map((id) => Number(id))
     .filter((id) => !Number.isNaN(id));
+
+  const summaryQuery = useGetBookingSummaryQuery(
+    { user_id: user?.id || "", booking_ids: bookingIds },
+    { skip: !user?.id || bookingIds.length === 0 },
+  );
+  const summary = summaryQuery.data?.data;
+
+  const effectiveStatus =
+    typeof summary?.status === "number" ? summary.status : bookingStatusParam;
+  const movieId = summary?.tmdb_movie_id || movieIdParam;
+  const slotId = summary?.timeslot_id || slotIdParam;
+  const seats = summary?.seat_ids?.length ? summary.seat_ids : seatsParam;
+  const amount = summary?.amount ? Number(summary.amount) : amountParam;
+  const normalizedTime = summary?.show_time
+    ? String(summary.show_time)
+    : normalizedTimeParam;
+  const dateMoment = summary?.show_date
+    ? moment(summary.show_date)
+    : dateMomentParam;
+
+  const statusDetails = useMemo(() => {
+    switch (effectiveStatus) {
+      case BookingStatus.CONFIRMED:
+        return {
+          label: "Confirmed",
+          helper: "Your booking is confirmed. Enjoy the show.",
+          badge: "bg-emerald-500/15 border-emerald-500/35 text-emerald-300",
+          paymentLabel: "Payment Successful",
+          allowPayment: false,
+        };
+      case BookingStatus.FAILED:
+        return {
+          label: "Payment Failed",
+          helper: "Payment failed. Please try booking again.",
+          badge: "bg-red-500/15 border-red-500/35 text-red-300",
+          paymentLabel: "Payment Failed",
+          allowPayment: false,
+        };
+      case BookingStatus.EXPIRED:
+        return {
+          label: "Booking Expired",
+          helper: "Payment window expired. Please book seats again.",
+          badge: "bg-red-500/15 border-red-500/35 text-red-300",
+          paymentLabel: "Expired",
+          allowPayment: false,
+        };
+      case BookingStatus.CANCELLED:
+        return {
+          label: "Booking Cancelled",
+          helper: "This booking was cancelled. You can book again anytime.",
+          badge: "bg-orange-500/15 border-orange-500/35 text-orange-300",
+          paymentLabel: "Cancelled",
+          allowPayment: false,
+        };
+      case BookingStatus.REFUNDED:
+        return {
+          label: "Booking Refunded",
+          helper: "Your refund has been processed.",
+          badge: "bg-orange-500/15 border-orange-500/35 text-orange-300",
+          paymentLabel: "Refunded",
+          allowPayment: false,
+        };
+      case BookingStatus.PENDING_PAYMENT:
+      default:
+        return {
+          label: "Payment Pending",
+          helper: "Review details and complete payment to confirm your seats.",
+          badge: "bg-amber-500/15 border-amber-500/35 text-amber-300",
+          paymentLabel: "Payment Pending",
+          allowPayment: true,
+        };
+    }
+  }, [effectiveStatus]);
 
   const { data: movie } = useGetMovieByIdQuery(movieId, { skip: !movieId });
   const [createCheckoutSession, { isLoading }] =
     useCreateCheckoutSessionMutation();
 
   const payDeadline = useMemo(() => {
-    if (!date || !time) return null;
-    const showStart = new Date(`${date}T${time}`);
-    return new Date(showStart.getTime() - 60 * 60 * 1000);
-  }, [date, time]);
+    if (!dateMoment || !normalizedTime) return null;
+    const showStart = moment(
+      `${dateMoment.format("YYYY-MM-DD")}T${normalizedTime}`,
+      moment.ISO_8601,
+      true,
+    );
+    if (!showStart.isValid()) return null;
+    return showStart.clone().subtract(1, "hour");
+  }, [dateMoment, normalizedTime]);
 
   const isExpiredForPayment = useMemo(() => {
     if (!payDeadline) return true;
-    return new Date() >= payDeadline;
+    return moment().isSameOrAfter(payDeadline);
   }, [payDeadline]);
+  const isPendingPayment = effectiveStatus === BookingStatus.PENDING_PAYMENT;
+  const showExpiredWarning = isPendingPayment && isExpiredForPayment;
 
-  const formattedDate = date ? formatDate(date, "ddd, MMM D, YYYY") : "-";
-  const formattedTime = time
-    ? formatDate(`2000-01-01T${time}`, "hh:mm A")
+  const formattedDate = dateMoment
+    ? dateMoment.format("ddd, MMM D, YYYY")
+    : "-";
+  const formattedTime = normalizedTime
+    ? moment(`2000-01-01T${normalizedTime}`).format("hh:mm A")
     : "-";
   const seatCount = seats.length;
   const perSeatAmount = seatCount > 0 ? amount / seatCount : 0;
@@ -72,9 +166,7 @@ export default function BookingSummaryPage() {
           <h1 className="text-3xl md:text-4xl font-black tracking-tight">
             Booking Summary
           </h1>
-          <p className="text-zinc-400">
-            Review details and complete payment to confirm your seats.
-          </p>
+          <p className="text-zinc-400">{statusDetails.helper}</p>
         </div>
 
         <div className="space-y-4">
@@ -96,8 +188,13 @@ export default function BookingSummaryPage() {
                 </div>
               </div>
               <div className="flex-1 min-w-0 space-y-2">
-                <div className="inline-flex rounded-full bg-amber-500/15 border border-amber-500/30 px-2.5 py-1 text-[11px] font-semibold text-amber-300">
-                  Payment Pending
+                <div
+                  className={cn(
+                    "inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold border",
+                    statusDetails.badge,
+                  )}
+                >
+                  {statusDetails.label}
                 </div>
                 <h2 className="text-lg md:text-2xl font-bold leading-tight line-clamp-2">
                   {movie?.title || "Movie"}
@@ -175,12 +272,12 @@ export default function BookingSummaryPage() {
                 <span
                   className={cn(
                     "text-[11px] font-semibold px-2.5 py-1 rounded-full border",
-                    isExpiredForPayment
-                      ? "bg-red-500/15 border-red-500/35 text-red-300"
-                      : "bg-amber-500/15 border-amber-500/35 text-amber-300",
+                    statusDetails.badge,
                   )}
                 >
-                  {isExpiredForPayment ? "Expired" : "Payment Pending"}
+                  {isPendingPayment && isExpiredForPayment
+                    ? "Expired"
+                    : statusDetails.paymentLabel}
                 </span>
               </div>
 
@@ -209,7 +306,9 @@ export default function BookingSummaryPage() {
               <div className="rounded-lg bg-zinc-900 border border-white/10 px-3 py-3 text-sm">
                 <p className="text-zinc-400 text-xs">Payment Deadline</p>
                 <p className="text-zinc-100 font-semibold">
-                  {payDeadline ? payDeadline.toLocaleString() : "-"}
+                  {payDeadline
+                    ? payDeadline.local().format("MMM D, YYYY, h:mm A")
+                    : "-"}
                 </p>
                 <p className="text-zinc-500 text-xs mt-1">
                   Booking expires automatically 1 hour before show time.
@@ -217,7 +316,7 @@ export default function BookingSummaryPage() {
               </div>
             </div>
 
-            {isExpiredForPayment && (
+            {showExpiredWarning && (
               <div className="rounded-xl border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-300 flex items-center gap-2">
                 <AlertTriangle className="w-4 h-4" />
                 Payment window expired. Please book seats again.
@@ -229,58 +328,79 @@ export default function BookingSummaryPage() {
                 variant="outline"
                 size="lg"
                 className="w-full sm:w-44"
-                onClick={() => router.push("/transactions")}
+                onClick={() => router.push("/bookings")}
               >
                 Go to Bookings
               </Button>
-              <Button
-                size="lg"
-                className={cn(
-                  "w-full sm:w-44",
-                  isExpiredForPayment && "opacity-60",
-                )}
-                disabled={
-                  isLoading ||
-                  isExpiredForPayment ||
-                  !movieId ||
-                  !slotId ||
-                  !date ||
-                  !time ||
-                  seats.length === 0 ||
-                  bookingIds.length === 0
-                }
-                onClick={async () => {
-                  try {
-                    const utc = convertDateTimeToUTC(date, time);
-                    const utcDate = utc.split("T")[0];
-                    const utcTime = utc.split("T")[1].replace("Z", "");
-
-                    const response = await createCheckoutSession({
-                      user_id: user?.id,
-                      user_email: user?.email,
-                      tmdb_movie_id: movieId,
-                      movie_title: movie?.title,
-                      show_date: utcDate,
-                      show_time: utcTime,
-                      timeslot_id: slotId,
-                      seat_ids: seats,
-                      amount,
-                      booking_ids: bookingIds,
-                    }).unwrap();
-
-                    if (response.url) {
-                      router.push(response.url);
-                      return;
-                    }
-                    toast.error("Failed to start payment");
-                  } catch (error) {
-                    console.error("Checkout error", error);
-                    toast.error("Unable to start payment");
+              {statusDetails.allowPayment && (
+                <Button
+                  size="lg"
+                  className={cn(
+                    "w-full sm:w-44",
+                    isExpiredForPayment && "opacity-60",
+                  )}
+                  disabled={
+                    isLoading ||
+                    isExpiredForPayment ||
+                    !movieId ||
+                    !slotId ||
+                    !dateMoment ||
+                    !normalizedTime ||
+                    seats.length === 0 ||
+                    bookingIds.length === 0
                   }
-                }}
-              >
-                {isLoading ? "Processing..." : "Pay Now"}
-              </Button>
+                  onClick={async () => {
+                    try {
+                      const effectiveDate = dateMoment
+                        ? dateMoment.format("YYYY-MM-DD")
+                        : "";
+                      const utc = convertDateTimeToUTC(
+                        effectiveDate,
+                        normalizedTime || "00:00:00",
+                      );
+                      const utcMoment = moment.utc(utc);
+                      if (!utcMoment.isValid()) {
+                        toast.error("Invalid show time. Please rebook seats.");
+                        return;
+                      }
+                      const utcDate = utcMoment.format("YYYY-MM-DD");
+                      const utcTime = utcMoment.format("HH:mm:ss");
+
+                      const response = await createCheckoutSession({
+                        user_id: user?.id,
+                        user_email: user?.email,
+                        tmdb_movie_id: movieId,
+                        movie_title: movie?.title,
+                        show_date: utcDate,
+                        show_time: utcTime,
+                        timeslot_id: slotId,
+                        seat_ids: seats,
+                        amount,
+                        booking_ids: bookingIds,
+                      }).unwrap();
+
+                      if (response.url) {
+                        router.push(response.url);
+                        return;
+                      }
+                      toast.error("Failed to start payment");
+                    } catch (error) {
+                      console.error("Checkout error", error);
+                      const anyErr = error as {
+                        data?: { message?: string };
+                        message?: string;
+                      };
+                      toast.error(
+                        anyErr?.data?.message ||
+                          anyErr?.message ||
+                          "Unable to start payment",
+                      );
+                    }
+                  }}
+                >
+                  {isLoading ? "Processing..." : "Pay Now"}
+                </Button>
+              )}
             </div>
           </section>
         </div>
