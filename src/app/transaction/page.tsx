@@ -2,6 +2,6 @@
 
 import BookingsTablePage from "@/components/BookingsTablePage";
 
-export default function TransactionsPage() {
+export default function TransactionPage() {
   return <BookingsTablePage mode="transactions" title="Transactions" />;
 }

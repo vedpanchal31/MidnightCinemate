@@ -134,6 +134,17 @@ export interface TimeSlot {
   updated_at: Date;
 }
 
+export interface Notification {
+  id: number;
+  user_id: string;
+  type: string;
+  title: string;
+  message: string;
+  data?: Record<string, unknown> | null;
+  is_read: boolean;
+  created_at: Date;
+}
+
 export interface CreateTimeSlotRequest {
   tmdb_movie_id: number;
   show_date: string;

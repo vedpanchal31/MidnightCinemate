@@ -21,6 +21,7 @@ import { formatDate } from "@/helpers/HelperFunction";
 import toast from "react-hot-toast";
 import moment from "moment";
 import { getScreenSeatLayout } from "@/data/screenLayouts";
+import { BookingStatus } from "@/data/constants";
 
 interface Seat {
   id: string;
@@ -433,7 +434,7 @@ export default function BookingPage({
               }
 
               try {
-                const response = await createBooking({
+                const result = await createBooking({
                   user_id: user?.id,
                   tmdb_movie_id: movieId!,
                   show_date: dateParam!,
@@ -443,9 +444,18 @@ export default function BookingPage({
                   amount: totalPrice,
                 }).unwrap();
 
-                const bookingIds = response
+                if (!result.success || !Array.isArray(result.data)) {
+                  toast.error(result.message || "Unable to confirm seats");
+                  return;
+                }
+
+                const bookingIds = result.data
                   .map((booking) => booking.id)
                   .join(",");
+                if (!bookingIds) {
+                  toast.error("Unable to confirm seats");
+                  return;
+                }
                 const query = new URLSearchParams({
                   movieId: String(movieId!),
                   date: dateParam!,
@@ -454,11 +464,20 @@ export default function BookingPage({
                   seats: selectedSeats.join(","),
                   amount: String(totalPrice),
                   bookingIds,
+                  status: String(BookingStatus.PaymentPending),
                 });
                 router.push(`/booking/summary?${query.toString()}`);
               } catch (err) {
                 console.error("Seat confirmation failed:", err);
-                toast.error("Unable to confirm seats");
+                const anyErr = err as {
+                  data?: { message?: string };
+                  message?: string;
+                };
+                toast.error(
+                  anyErr?.data?.message ||
+                    anyErr?.message ||
+                    "Unable to confirm seats",
+                );
               }
             }}
           >

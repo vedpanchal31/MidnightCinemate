@@ -8,8 +8,10 @@ import {
   CreateBookingRequest,
   BookingStatus,
   Payment,
+  Notification,
 } from "./schema";
 import { getScreenTypeCapacity, type ScreenType } from "@/data/screenLayouts";
+import { getIO } from "@/lib/socket/io";
 
 export interface User {
   id: string;
@@ -471,7 +473,10 @@ export const getTimeSlotsByMovie = async (
       WHERE status IN ($2, $3)
       GROUP BY timeslot_id, tmdb_movie_id
     ) b ON t.id = b.timeslot_id AND b.tmdb_movie_id = $1
-    WHERE t.is_active = true AND t.tmdb_movie_id = $1
+    WHERE t.is_active = true
+      AND (t.show_date::timestamp + t.start_time) > (CURRENT_TIMESTAMP + INTERVAL '1 hour')
+      AND t.tmdb_movie_id = $1
+      AND (t.show_date::timestamp + t.start_time) > (CURRENT_TIMESTAMP + INTERVAL '1 hour')
   `;
   const params: (string | number)[] = [
     tmdb_movie_id,
@@ -629,6 +634,8 @@ export const createBooking = async (
   bookingData: CreateBookingRequest,
 ): Promise<Booking[]> => {
   const client = await db.pool.connect();
+  let booking: Booking | null = null;
+  let seatIds: string[] = [];
   try {
     await client.query("BEGIN");
     const uniqueSeatIds = [...new Set(bookingData.seat_ids)];
@@ -748,8 +755,9 @@ export const createBooking = async (
       ],
     );
 
-    const booking = bookingResult.rows[0];
-    if (!booking) {
+    const bookingRow = bookingResult.rows[0] as Booking | undefined;
+    booking = bookingRow ?? null;
+    if (!bookingRow) {
       throw new Error("Failed to create booking");
     }
 
@@ -761,7 +769,7 @@ export const createBooking = async (
         `($${seatParamCount}, $${seatParamCount + 1}, $${seatParamCount + 2}, $${seatParamCount + 3}, $${seatParamCount + 4})`,
       );
       seatValues.push(
-        booking.id,
+        bookingRow.id,
         bookingData.tmdb_movie_id,
         bookingData.timeslot_id,
         seatId,
@@ -777,12 +785,41 @@ export const createBooking = async (
     );
 
     await client.query("COMMIT");
-    return [{ ...booking, seat_ids: uniqueSeatIds }];
+    seatIds = uniqueSeatIds;
+    return [{ ...bookingRow, seat_ids: uniqueSeatIds }];
   } catch (error) {
     await client.query("ROLLBACK");
     throw error;
   } finally {
     client.release();
+    if (booking && booking.user_id && booking.user_id !== "guest") {
+      await createNotification({
+        user_id: String(booking.user_id),
+        type: "booking_created",
+        title: "Booking Created",
+        message: `Your booking is initiated and pending payment for ${seatIds.length} seat(s).`,
+        data: {
+          booking_id: booking.id,
+          tmdb_movie_id: booking.tmdb_movie_id,
+          timeslot_id: booking.timeslot_id,
+          seat_ids: seatIds,
+          status: BookingStatus.PENDING_PAYMENT,
+        },
+      });
+      await createNotification({
+        user_id: String(booking.user_id),
+        type: "seats_reserved",
+        title: "Seats Reserved",
+        message:
+          "We’ve held your seats for 10 minutes. Please complete payment to confirm your booking.",
+        data: {
+          booking_id: booking.id,
+          tmdb_movie_id: booking.tmdb_movie_id,
+          timeslot_id: booking.timeslot_id,
+          seat_ids: seatIds,
+        },
+      });
+    }
   }
 };
 
@@ -836,6 +873,93 @@ export const getBookingsByUser = async (
   return result.rows;
 };
 
+export const getTransactionsByUser = async (
+  user_id: string,
+): Promise<Booking[]> => {
+  const result = await db.query(
+    `SELECT
+      mb.*,
+      COALESCE(
+        ARRAY_AGG(bs.seat_id ORDER BY bs.seat_id)
+          FILTER (WHERE bs.seat_id IS NOT NULL),
+        '{}'
+      ) AS seat_ids
+     FROM "MovieBooking" mb
+     LEFT JOIN "BookingSeat" bs ON bs.booking_id = mb.id
+     WHERE mb.user_id = $1 AND mb.status <> $2
+     GROUP BY mb.id
+     ORDER BY mb.created_at DESC`,
+    [user_id, BookingStatus.REFUNDED],
+  );
+  return result.rows;
+};
+
+export const getRefundsByUser = async (user_id: string): Promise<Booking[]> => {
+  const result = await db.query(
+    `SELECT
+      mb.*,
+      COALESCE(
+        ARRAY_AGG(bs.seat_id ORDER BY bs.seat_id)
+          FILTER (WHERE bs.seat_id IS NOT NULL),
+        '{}'
+      ) AS seat_ids
+     FROM "MovieBooking" mb
+     LEFT JOIN "BookingSeat" bs ON bs.booking_id = mb.id
+     WHERE mb.user_id = $1 AND mb.status = $2
+     GROUP BY mb.id
+     ORDER BY mb.created_at DESC`,
+    [user_id, BookingStatus.REFUNDED],
+  );
+  return result.rows;
+};
+
+export const getBookingSummaryByIds = async (
+  bookingIds: number[],
+): Promise<{
+  id: number;
+  user_id: string;
+  tmdb_movie_id: number;
+  show_date: string;
+  show_time: string;
+  timeslot_id: string;
+  seat_ids: string[];
+  amount: number;
+  status: number;
+  stripe_session_id: string | null;
+  stripe_payment_id: string | null;
+  created_at: string;
+} | null> => {
+  if (!bookingIds.length) return null;
+  const result = await db.query(
+    `SELECT
+       MIN(mb.id) AS id,
+       MIN(mb.user_id::text) AS user_id,
+       MIN(mb.tmdb_movie_id) AS tmdb_movie_id,
+       MIN(mb.show_date) AS show_date,
+       MIN(mb.show_time) AS show_time,
+       MIN(mb.timeslot_id::text) AS timeslot_id,
+       COALESCE(
+         ARRAY_AGG(bs.seat_id ORDER BY bs.seat_id)
+           FILTER (WHERE bs.seat_id IS NOT NULL),
+         '{}'
+       ) AS seat_ids,
+       SUM(mb.price)::numeric(10,2) AS amount,
+       MIN(mb.status) AS status,
+       MIN(mb.stripe_session_id) AS stripe_session_id,
+       MIN(mb.stripe_payment_id) AS stripe_payment_id,
+       MIN(mb.created_at) AS created_at
+     FROM "MovieBooking" mb
+     LEFT JOIN "BookingSeat" bs ON bs.booking_id = mb.id
+     WHERE mb.id = ANY($1)
+     GROUP BY mb.user_id, mb.tmdb_movie_id, mb.show_date, mb.show_time, mb.timeslot_id
+     ORDER BY MIN(mb.created_at) DESC
+     LIMIT 1`,
+    [bookingIds],
+  );
+
+  return result.rows[0] ?? null;
+};
+
 // Payment Operations
 export const createPayment = async (
   paymentData: Partial<Payment>,
@@ -876,16 +1000,32 @@ export const updateBookingStatusBySession = async (
   paymentId?: string,
 ): Promise<boolean> => {
   const client = await db.pool.connect();
+  let updatedBookings: Array<{
+    id: number;
+    user_id: string;
+    tmdb_movie_id: number;
+    timeslot_id: string;
+    show_date: string;
+    show_time: string;
+  }> = [];
   try {
     await client.query("BEGIN");
     const result = await client.query(
       `UPDATE "MovieBooking" 
        SET status = $2, stripe_payment_id = COALESCE($3, stripe_payment_id)
        WHERE stripe_session_id = $1
-       RETURNING id`,
+       RETURNING id, user_id, tmdb_movie_id, timeslot_id, show_date, show_time`,
       [sessionId, status, paymentId || null],
     );
     const updatedIds = result.rows.map((row) => Number(row.id));
+    updatedBookings = result.rows.map((row) => ({
+      id: Number(row.id),
+      user_id: String(row.user_id),
+      tmdb_movie_id: Number(row.tmdb_movie_id),
+      timeslot_id: String(row.timeslot_id),
+      show_date: String(row.show_date),
+      show_time: String(row.show_time),
+    }));
     if (updatedIds.length > 0) {
       await client.query(
         `UPDATE "BookingSeat"
@@ -895,6 +1035,7 @@ export const updateBookingStatusBySession = async (
       );
     }
     await client.query("COMMIT");
+    await emitBookingStatusNotifications(updatedBookings, status, paymentId);
     return result.rowCount ? result.rowCount > 0 : false;
   } catch (error) {
     await client.query("ROLLBACK");
@@ -938,6 +1079,22 @@ export const cancelBookingsByIds = async (
       );
     }
     await client.query("COMMIT");
+    if (updatedIds.length > 0 && userId && userId !== "guest") {
+      await createNotification({
+        user_id: userId,
+        type: "booking_cancelled",
+        title: "Booking Cancelled",
+        message: `Your booking has been cancelled (${updatedIds.length} ticket(s)).`,
+        data: { booking_ids: updatedIds },
+      });
+      await createNotification({
+        user_id: userId,
+        type: "seats_available",
+        title: "Seats Available",
+        message: "Cancelled seats are now available for rebooking.",
+        data: { booking_ids: updatedIds },
+      });
+    }
     return result.rowCount || 0;
   } catch (error) {
     await client.query("ROLLBACK");
@@ -949,6 +1106,7 @@ export const cancelBookingsByIds = async (
 
 export const expirePendingBookingsBeforeShow = async (): Promise<number> => {
   const client = await db.pool.connect();
+  let updatedBookings: Array<{ id: number; user_id: string }> = [];
   try {
     await client.query("BEGIN");
     const result = await client.query(
@@ -956,10 +1114,14 @@ export const expirePendingBookingsBeforeShow = async (): Promise<number> => {
        SET status = $1, updated_at = CURRENT_TIMESTAMP
        WHERE status = $2
          AND (show_date::timestamp + show_time) <= (CURRENT_TIMESTAMP + INTERVAL '1 hour')
-       RETURNING id`,
+       RETURNING id, user_id`,
       [BookingStatus.EXPIRED, BookingStatus.PENDING_PAYMENT],
     );
     const updatedIds = result.rows.map((row) => Number(row.id));
+    updatedBookings = result.rows.map((row) => ({
+      id: Number(row.id),
+      user_id: String(row.user_id),
+    }));
     if (updatedIds.length > 0) {
       await client.query(
         `UPDATE "BookingSeat"
@@ -969,11 +1131,293 @@ export const expirePendingBookingsBeforeShow = async (): Promise<number> => {
       );
     }
     await client.query("COMMIT");
+    await emitExpiredBookingNotifications(updatedBookings);
     return result.rowCount || 0;
   } catch (error) {
     await client.query("ROLLBACK");
     throw error;
   } finally {
     client.release();
+  }
+};
+
+// Notification helpers
+export const createNotification = async (payload: {
+  user_id: string;
+  type: string;
+  title: string;
+  message: string;
+  data?: Record<string, unknown> | null;
+}): Promise<Notification> => {
+  const result = await db.query(
+    `INSERT INTO "Notification" (user_id, type, title, message, data, is_read, created_at)
+     VALUES ($1, $2, $3, $4, $5::jsonb, false, CURRENT_TIMESTAMP)
+     RETURNING *`,
+    [
+      payload.user_id,
+      payload.type,
+      payload.title,
+      payload.message,
+      JSON.stringify(payload.data || {}),
+    ],
+  );
+
+  const notification = result.rows[0] as Notification;
+  const io = getIO();
+  if (io) {
+    const unread = await getUnreadNotificationCount(payload.user_id);
+    io.to(`user:${payload.user_id}`).emit("notification:new", notification);
+    io.to(`user:${payload.user_id}`).emit("notification:count", {
+      unread_count: unread,
+    });
+  }
+
+  return notification;
+};
+
+export const getUnreadNotificationCount = async (
+  userId: string,
+): Promise<number> => {
+  const result = await db.query(
+    `SELECT COUNT(*)::int AS count
+     FROM "Notification"
+     WHERE user_id = $1 AND is_read = false`,
+    [userId],
+  );
+  return Number(result.rows[0]?.count || 0);
+};
+
+export const getNotificationsByUser = async (
+  userId: string,
+  limit = 20,
+  offset = 0,
+): Promise<Notification[]> => {
+  const result = await db.query(
+    `SELECT *
+     FROM "Notification"
+     WHERE user_id = $1
+     ORDER BY created_at DESC
+     LIMIT $2 OFFSET $3`,
+    [userId, limit, offset],
+  );
+  return result.rows as Notification[];
+};
+
+export const markNotificationRead = async (
+  userId: string,
+  notificationId: number,
+): Promise<boolean> => {
+  const result = await db.query(
+    `UPDATE "Notification"
+     SET is_read = true
+     WHERE id = $1 AND user_id = $2`,
+    [notificationId, userId],
+  );
+  return result.rowCount ? result.rowCount > 0 : false;
+};
+
+export const markAllNotificationsRead = async (
+  userId: string,
+): Promise<number> => {
+  const result = await db.query(
+    `UPDATE "Notification"
+     SET is_read = true
+     WHERE user_id = $1 AND is_read = false`,
+    [userId],
+  );
+  return result.rowCount || 0;
+};
+
+export const createNotificationOnce = async (payload: {
+  user_id: string;
+  type: string;
+  title: string;
+  message: string;
+  data?: Record<string, unknown> | null;
+  booking_id?: number;
+}): Promise<Notification | null> => {
+  if (payload.booking_id) {
+    const exists = await db.query(
+      `SELECT 1
+       FROM "Notification"
+       WHERE user_id = $1
+         AND type = $2
+         AND (data->>'booking_id')::int = $3
+       LIMIT 1`,
+      [payload.user_id, payload.type, payload.booking_id],
+    );
+    if (exists.rowCount && exists.rowCount > 0) {
+      return null;
+    }
+  }
+
+  return createNotification({
+    user_id: payload.user_id,
+    type: payload.type,
+    title: payload.title,
+    message: payload.message,
+    data: payload.data,
+  });
+};
+
+export const getConfirmedBookingsInWindow = async (
+  startMinutes: number,
+  endMinutes: number,
+): Promise<
+  Array<{
+    id: number;
+    user_id: string;
+    tmdb_movie_id: number;
+    show_date: string;
+    show_time: string;
+  }>
+> => {
+  const result = await db.query(
+    `SELECT id, user_id, tmdb_movie_id, show_date, show_time
+     FROM "MovieBooking"
+     WHERE status = $1
+       AND user_id IS NOT NULL
+       AND user_id <> 'guest'
+       AND (show_date::timestamp + show_time)
+         BETWEEN (CURRENT_TIMESTAMP + ($2 * INTERVAL '1 minute'))
+         AND (CURRENT_TIMESTAMP + ($3 * INTERVAL '1 minute'))`,
+    [BookingStatus.CONFIRMED, startMinutes, endMinutes],
+  );
+  return result.rows;
+};
+
+export const deleteNotification = async (
+  userId: string,
+  notificationId: number,
+): Promise<boolean> => {
+  const result = await db.query(
+    `DELETE FROM "Notification"
+     WHERE id = $1 AND user_id = $2`,
+    [notificationId, userId],
+  );
+  return result.rowCount ? result.rowCount > 0 : false;
+};
+
+export const deleteAllNotifications = async (
+  userId: string,
+): Promise<number> => {
+  const result = await db.query(
+    `DELETE FROM "Notification"
+     WHERE user_id = $1`,
+    [userId],
+  );
+  return result.rowCount || 0;
+};
+
+const emitBookingStatusNotifications = async (
+  bookings: Array<{
+    id: number;
+    user_id: string;
+    tmdb_movie_id: number;
+    timeslot_id: string;
+    show_date: string;
+    show_time: string;
+  }>,
+  status: BookingStatus,
+  paymentId?: string,
+): Promise<void> => {
+  const grouped = new Map<string, number[]>();
+  const movieByUser = new Map<string, number>();
+  bookings.forEach((booking) => {
+    if (!booking.user_id || booking.user_id === "guest") return;
+    const existing = grouped.get(booking.user_id) || [];
+    existing.push(booking.id);
+    grouped.set(booking.user_id, existing);
+    if (!movieByUser.has(booking.user_id)) {
+      movieByUser.set(booking.user_id, booking.tmdb_movie_id);
+    }
+  });
+
+  for (const [userId, bookingIds] of grouped.entries()) {
+    const tmdbMovieId = movieByUser.get(userId);
+    if (status === BookingStatus.CONFIRMED) {
+      const amountResult = await db.query(
+        `SELECT COALESCE(SUM(price), 0) AS total_amount
+         FROM "MovieBooking"
+         WHERE id = ANY($1)`,
+        [bookingIds],
+      );
+      const totalAmount = Number(amountResult.rows[0]?.total_amount || 0);
+      await createNotification({
+        user_id: userId,
+        type: "payment_success",
+        title: "Payment Successful",
+        message: "Your payment was successful.",
+        data: {
+          booking_ids: bookingIds,
+          payment_id: paymentId || null,
+          tmdb_movie_id: tmdbMovieId,
+          amount: totalAmount,
+        },
+      });
+      await createNotification({
+        user_id: userId,
+        type: "booking_confirmed",
+        title: "Booking Confirmed",
+        message: "Your booking is confirmed. Enjoy the show.",
+        data: { booking_ids: bookingIds, tmdb_movie_id: tmdbMovieId },
+      });
+    }
+
+    if (status === BookingStatus.EXPIRED) {
+      await createNotification({
+        user_id: userId,
+        type: "booking_expired",
+        title: "Booking Expired",
+        message: "Your pending booking expired due to timeout.",
+        data: { booking_ids: bookingIds },
+      });
+      await createNotification({
+        user_id: userId,
+        type: "seats_available",
+        title: "Seats Available",
+        message: "Expired seats are now available for rebooking.",
+        data: { booking_ids: bookingIds },
+      });
+    }
+
+    if (status === BookingStatus.FAILED) {
+      await createNotification({
+        user_id: userId,
+        type: "payment_failed",
+        title: "Payment Failed",
+        message: "Your payment failed. Please try again.",
+        data: { booking_ids: bookingIds },
+      });
+    }
+  }
+};
+
+const emitExpiredBookingNotifications = async (
+  bookings: Array<{ id: number; user_id: string }>,
+): Promise<void> => {
+  const grouped = new Map<string, number[]>();
+  bookings.forEach((booking) => {
+    if (!booking.user_id || booking.user_id === "guest") return;
+    const existing = grouped.get(booking.user_id) || [];
+    existing.push(booking.id);
+    grouped.set(booking.user_id, existing);
+  });
+
+  for (const [userId, bookingIds] of grouped.entries()) {
+    await createNotification({
+      user_id: userId,
+      type: "booking_expired",
+      title: "Booking Expired",
+      message: "Your pending booking expired due to timeout.",
+      data: { booking_ids: bookingIds },
+    });
+    await createNotification({
+      user_id: userId,
+      type: "seats_available",
+      title: "Seats Available",
+      message: "Expired seats are now available for rebooking.",
+      data: { booking_ids: bookingIds },
+    });
   }
 };

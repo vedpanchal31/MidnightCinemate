@@ -7,6 +7,7 @@ import storage from "redux-persist/lib/storage";
 import authReducer, { AuthState } from "./authSlice";
 import { authApi } from "./authApi";
 import { moviesApi } from "./moviesApi";
+import { notificationsApi } from "./notificationsApi";
 
 // Auth persist configuration
 const authPersistConfig = {
@@ -45,6 +46,7 @@ export const store = configureStore({
     >,
     [authApi.reducerPath]: authApi.reducer,
     [moviesApi.reducerPath]: moviesApi.reducer,
+    [notificationsApi.reducerPath]: notificationsApi.reducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({
@@ -53,7 +55,8 @@ export const store = configureStore({
       },
     })
       .concat(authApi.middleware)
-      .concat(moviesApi.middleware),
+      .concat(moviesApi.middleware)
+      .concat(notificationsApi.middleware),
 });
 
 // Persistor for redux-persist

@@ -6,6 +6,7 @@ import {
   createUser,
   findUserByEmail,
   updateUser,
+  createNotification,
 } from "@/lib/database/db-service";
 import { generateJWTToken, generateRefreshToken } from "@/lib/utils/auth";
 
@@ -219,6 +220,14 @@ export async function POST(request: Request) {
         is_email_verified: true,
         last_login: now,
       };
+
+      await createNotification({
+        user_id: user.id,
+        type: "welcome",
+        title: "Welcome to Cinemate",
+        message: `Welcome ${user.name}! Your account is verified and ready to book.`,
+        data: { user_id: user.id },
+      });
     } else {
       if (!user.is_active) {
         return NextResponse.json<ErrorResponse>(
@@ -230,6 +239,7 @@ export async function POST(request: Request) {
         );
       }
 
+      const isFirstLogin = !user.last_login;
       step = "db:update-existing-user";
       await updateUser(email, {
         is_email_verified: true,
@@ -241,6 +251,16 @@ export async function POST(request: Request) {
         is_email_verified: true,
         last_login: now,
       };
+
+      if (isFirstLogin) {
+        await createNotification({
+          user_id: user.id,
+          type: "welcome",
+          title: "Welcome to Cinemate",
+          message: `Welcome ${user.name}! Your account is verified and ready to book.`,
+          data: { user_id: user.id },
+        });
+      }
     }
 
     step = "auth:generate-jwt";
