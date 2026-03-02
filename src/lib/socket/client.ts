@@ -15,7 +15,8 @@ export const getSocket = (userId: string): Socket => {
   }
 
   currentUserId = userId;
-  socket = io({
+  const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || undefined;
+  socket = io(socketUrl, {
     path: "/socket.io",
     auth: { userId },
   });
