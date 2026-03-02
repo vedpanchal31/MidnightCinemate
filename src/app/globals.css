@@ -209,17 +209,17 @@
 
 ::-webkit-scrollbar-track {
   -webkit-box-shadow: inset 0 0 6px rgba(0, 0, 0, 0.1);
-  background-color: #1c1c1e;
+  background-color: var(--sidebar);
   border-radius: 8px;
 }
 
 ::-webkit-scrollbar {
   width: 4px;
   height: 5px;
-  background-color: #1c1c1e;
+  background-color: var(--sidebar);
 }
 
 ::-webkit-scrollbar-thumb {
   border-radius: 8px;
-  background-color: #3b82f6;
+  background-color: var(--primary);
 }
