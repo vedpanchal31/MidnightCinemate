@@ -6,11 +6,12 @@ import { useRouter } from "next/navigation";
 import { useDispatch, useSelector } from "react-redux";
 import { AppDispatch, RootState } from "@/store/store";
 import { AuthState } from "@/store/authSlice";
-import { getSocket, disconnectSocket } from "@/lib/socket/client";
 import {
   notificationsApi,
   useGetUnreadCountQuery,
 } from "@/store/notificationsApi";
+import { getSupabaseClient } from "@/lib/supabase/client";
+import { getSocket, disconnectSocket } from "@/lib/socket/client";
 
 export default function NotificationIcon() {
   const router = useRouter();
@@ -18,7 +19,7 @@ export default function NotificationIcon() {
   const { user, isAuthenticated } = useSelector(
     (state: RootState) => state.auth as AuthState,
   );
-  const { data: unreadCount = 0 } = useGetUnreadCountQuery(
+  const { data: unreadCount = 0, refetch } = useGetUnreadCountQuery(
     { user_id: user?.id || "" },
     { skip: !isAuthenticated || !user?.id },
   );
@@ -30,30 +31,56 @@ export default function NotificationIcon() {
     }
 
     let isMounted = true;
+    const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL;
 
-    const socket = getSocket(user.id);
-    const handleCount = (payload: { unread_count: number }) => {
-      if (!isMounted) return;
-      try {
-        dispatch(
-          notificationsApi.util.upsertQueryData(
-            "getUnreadCount",
-            { user_id: user.id },
-            Number(payload?.unread_count || 0),
-          ),
-        );
-      } catch (error) {
-        console.error("Failed to update unread count:", error);
-      }
-    };
+    if (socketUrl) {
+      const socket = getSocket(user.id);
+      const handleCount = (payload: { unread_count: number }) => {
+        if (!isMounted) return;
+        try {
+          dispatch(
+            notificationsApi.util.upsertQueryData(
+              "getUnreadCount",
+              { user_id: user.id },
+              Number(payload?.unread_count || 0),
+            ),
+          );
+        } catch (error) {
+          console.error("Failed to update unread count:", error);
+        }
+      };
 
-    socket.on("notification:count", handleCount);
+      socket.on("notification:count", handleCount);
+
+      return () => {
+        isMounted = false;
+        socket.off("notification:count", handleCount);
+      };
+    }
+
+    const supabase = getSupabaseClient();
+    const channel = supabase
+      .channel(`notifications:${user.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "Notification",
+          filter: `user_id=eq.${user.id}`,
+        },
+        () => {
+          if (!isMounted) return;
+          refetch();
+        },
+      )
+      .subscribe();
 
     return () => {
       isMounted = false;
-      socket.off("notification:count", handleCount);
+      supabase.removeChannel(channel);
     };
-  }, [dispatch, isAuthenticated, user?.id]);
+  }, [dispatch, isAuthenticated, refetch, user?.id]);
 
   return (
     <button

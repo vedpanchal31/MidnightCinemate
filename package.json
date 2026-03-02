@@ -45,6 +45,7 @@
     "i18next": "^25.8.0",
     "ioredis": "^5.8.2",
     "jsonwebtoken": "^9.0.3",
+    "@supabase/supabase-js": "^2.49.1",
     "lucide-react": "^0.562.0",
     "maplibre-gl": "^5.15.0",
     "moment": "^2.30.1",
