@@ -68,6 +68,19 @@ export type MovieResponse = {
   total_results?: number;
 };
 
+export type CheckoutSessionRequest =
+  | (CreateBookingRequest & {
+      booking_ids?: number[];
+      movie_title?: string | React.ReactNode;
+      user_email?: string | null;
+    })
+  | {
+      booking_ids: number[];
+      user_id?: string;
+      user_email?: string | null;
+      movie_title?: string | React.ReactNode;
+    };
+
 export const moviesApi = createApi({
   reducerPath: "moviesApi",
   baseQuery,
@@ -186,20 +199,46 @@ export const moviesApi = createApi({
         response.data || [],
       providesTags: ["Booking"],
     }),
-    createBooking: builder.mutation<Booking[], CreateBookingRequest>({
+    createBooking: builder.mutation<
+      { success: boolean; message?: string; data: Booking[] },
+      CreateBookingRequest
+    >({
       query: (bookingData) => ({
         url: "/api/bookings",
         method: "post",
         data: bookingData,
       }),
-      transformResponse: (response: { success: boolean; data: Booking[] }) =>
-        response.data || [],
+      transformResponse: (response: {
+        success: boolean;
+        message?: string;
+        data: Booking[];
+      }) => response,
       invalidatesTags: ["Booking", "TimeSlot"],
     }),
     getUserBookings: builder.query<Booking[], string>({
       query: (userId) => ({
         url: `/api/bookings/user/${userId}`,
         method: "get",
+      }),
+      transformResponse: (response: { success: boolean; data: Booking[] }) =>
+        response.data || [],
+      providesTags: ["Booking"],
+    }),
+    getUserTransactions: builder.query<Booking[], string>({
+      query: (userId) => ({
+        url: "/api/bookings/transactions",
+        method: "get",
+        params: { user_id: userId },
+      }),
+      transformResponse: (response: { success: boolean; data: Booking[] }) =>
+        response.data || [],
+      providesTags: ["Booking"],
+    }),
+    getUserRefunds: builder.query<Booking[], string>({
+      query: (userId) => ({
+        url: "/api/bookings/refunds",
+        method: "get",
+        params: { user_id: userId },
       }),
       transformResponse: (response: { success: boolean; data: Booking[] }) =>
         response.data || [],
@@ -218,11 +257,7 @@ export const moviesApi = createApi({
     }),
     createCheckoutSession: builder.mutation<
       { success: boolean; url: string; sessionId: string },
-      CreateBookingRequest & {
-        booking_ids?: number[];
-        movie_title?: string | React.ReactNode;
-        user_email?: string | null;
-      }
+      CheckoutSessionRequest
     >({
       query: (bookingData) => ({
         url: "/api/checkout",
@@ -234,6 +269,32 @@ export const moviesApi = createApi({
       query: (sessionId) => ({
         url: `/api/bookings/session/${sessionId}`,
         method: "get",
+      }),
+    }),
+    getBookingSummary: builder.query<
+      {
+        success: boolean;
+        data: {
+          id: number;
+          user_id: string;
+          tmdb_movie_id: number;
+          show_date: string;
+          show_time: string;
+          timeslot_id: string;
+          seat_ids: string[];
+          amount: number;
+          status: number;
+          stripe_session_id: string | null;
+          stripe_payment_id: string | null;
+          created_at: string;
+        };
+      },
+      { user_id: string; booking_ids: number[] }
+    >({
+      query: ({ user_id, booking_ids }) => ({
+        url: "/api/bookings/summary",
+        method: "get",
+        params: { user_id, booking_ids: booking_ids.join(",") },
       }),
     }),
   }),
@@ -255,7 +316,10 @@ export const {
   useGetBookingsByMovieAndTimeQuery,
   useCreateBookingMutation,
   useGetUserBookingsQuery,
+  useGetUserTransactionsQuery,
+  useGetUserRefundsQuery,
   useCancelBookingsMutation,
   useCreateCheckoutSessionMutation,
   useGetBookingBySessionIdQuery,
+  useGetBookingSummaryQuery,
 } = moviesApi;

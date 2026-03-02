@@ -1,7 +1,13 @@
-import { BaseQueryApi, BaseQueryFn, FetchBaseQueryError } from "@reduxjs/toolkit/query";
+import {
+  BaseQueryApi,
+  BaseQueryFn,
+  FetchBaseQueryError,
+} from "@reduxjs/toolkit/query";
 import { AxiosError, AxiosRequestConfig, AxiosResponse } from "axios";
 
 import ApiClient from "./ApiClient";
+import { RootState } from "@/store/store";
+import { logout } from "@/store/authSlice";
 
 interface BaseQueryParams<D = unknown, P = unknown> {
   url: string;
@@ -13,10 +19,17 @@ interface BaseQueryParams<D = unknown, P = unknown> {
 }
 
 export const baseQuery: BaseQueryFn<BaseQueryParams, unknown, unknown> = async (
-  { url, method, data, params, headers: customHeaders, responseType }: BaseQueryParams,
-  _api: BaseQueryApi
+  {
+    url,
+    method,
+    data,
+    params,
+    headers: customHeaders,
+    responseType,
+  }: BaseQueryParams,
+  api: BaseQueryApi,
 ) => {
-  void _api;
+  const token = (api.getState() as RootState)?.auth?.token;
   try {
     const result: AxiosResponse = await ApiClient({
       url,
@@ -25,7 +38,8 @@ export const baseQuery: BaseQueryFn<BaseQueryParams, unknown, unknown> = async (
       params,
       responseType: responseType || "json",
       headers: {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...customHeaders,
       },
     });
@@ -33,6 +47,10 @@ export const baseQuery: BaseQueryFn<BaseQueryParams, unknown, unknown> = async (
     return { data: result.data };
   } catch (axiosError) {
     const err = axiosError as AxiosError;
+
+    if (err?.response?.status === 401) {
+      api.dispatch(logout());
+    }
 
     return {
       error: {

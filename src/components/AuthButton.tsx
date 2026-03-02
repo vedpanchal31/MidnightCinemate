@@ -3,7 +3,7 @@
 import React from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { User, LogOut, Ticket } from "lucide-react";
+import { User, LogOut, Ticket, CreditCard, RotateCcw } from "lucide-react";
 import { RootState } from "@/store/store";
 import { AuthState } from "@/store/authSlice";
 import {
@@ -19,10 +19,11 @@ export default function AuthButton() {
   const { user, isAuthenticated } = useSelector(
     (state: RootState) => state.auth as AuthState,
   );
+  const [open, setOpen] = React.useState(false);
 
   if (isAuthenticated && user) {
     return (
-      <Popover>
+      <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <Button
             variant="ghost"
@@ -54,11 +55,28 @@ export default function AuthButton() {
 
             <div className="grid gap-1">
               <Link
-                href="/transactions"
+                href="/bookings"
                 className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-zinc-300 hover:text-white hover:bg-white/5 rounded-lg transition-all group"
+                onClick={() => setOpen(false)}
               >
                 <Ticket className="h-4 w-4 text-zinc-500 group-hover:text-primary transition-colors" />
-                My Transactions
+                My Booking
+              </Link>
+              <Link
+                href="/transaction"
+                className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-zinc-300 hover:text-white hover:bg-white/5 rounded-lg transition-all group"
+                onClick={() => setOpen(false)}
+              >
+                <CreditCard className="h-4 w-4 text-zinc-500 group-hover:text-primary transition-colors" />
+                Transactions
+              </Link>
+              <Link
+                href="/refunds"
+                className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-zinc-300 hover:text-white hover:bg-white/5 rounded-lg transition-all group"
+                onClick={() => setOpen(false)}
+              >
+                <RotateCcw className="h-4 w-4 text-zinc-500 group-hover:text-primary transition-colors" />
+                Refunds
               </Link>
             </div>
 

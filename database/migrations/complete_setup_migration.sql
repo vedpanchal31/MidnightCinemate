@@ -75,18 +75,30 @@ CREATE TABLE IF NOT EXISTS "BookingSeat" (
     updated_at TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
--- Step 6: Create TimeSlotApiLog table
-CREATE TABLE IF NOT EXISTS "TimeSlotApiLog" (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    tmdb_movie_id INTEGER NOT NULL,
-    show_date DATE NOT NULL,
-    start_time TIME NOT NULL,
-    end_time TIME NOT NULL,
-    screen_type VARCHAR(10) DEFAULT '2D',
-    total_seats INTEGER DEFAULT 100,
-    api_response JSONB,
-    created_at TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+-- Step 6: Recreate TimeSlotApiLog table to match expected schema
+DROP TABLE IF EXISTS "TimeSlotApiLog";
+
+CREATE TABLE "TimeSlotApiLog" (
+    id BIGSERIAL PRIMARY KEY,
+    tmdb_movie_id INTEGER,
+    date_from DATE,
+    date_to DATE,
+    request_payload JSONB,
+    response_count INTEGER DEFAULT 0,
+    status VARCHAR(20) NOT NULL,
+    created_at TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Step 6b: Create Notification table
+CREATE TABLE IF NOT EXISTS "Notification" (
+    id BIGSERIAL PRIMARY KEY,
+    user_id UUID NOT NULL REFERENCES "User"(id) ON DELETE CASCADE,
+    type VARCHAR(50) NOT NULL,
+    title VARCHAR(255) NOT NULL,
+    message TEXT NOT NULL,
+    data JSONB,
+    is_read BOOLEAN NOT NULL DEFAULT false,
+    created_at TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Step 7: Create indexes for better performance
@@ -108,35 +120,75 @@ CREATE INDEX IF NOT EXISTS idx_movie_booking_stripe_payment_id ON "MovieBooking"
 CREATE INDEX IF NOT EXISTS idx_booking_seat_booking_id ON "BookingSeat"(booking_id);
 CREATE INDEX IF NOT EXISTS idx_booking_seat_active_unique ON "BookingSeat"(tmdb_movie_id, timeslot_id, seat_id) WHERE status IN (1, 2);
 
-CREATE INDEX IF NOT EXISTS idx_timeslot_api_log_movie_date ON "TimeSlotApiLog"(tmdb_movie_id, show_date);
 CREATE INDEX IF NOT EXISTS idx_timeslot_api_log_created_at ON "TimeSlotApiLog"(created_at);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_timeslot_api_log_tmdb_movie_id_unique
+ON "TimeSlotApiLog"(tmdb_movie_id)
+WHERE tmdb_movie_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_notification_user_id ON "Notification"(user_id);
+CREATE INDEX IF NOT EXISTS idx_notification_user_unread ON "Notification"(user_id, is_read);
 
 -- Step 7: Create unique indexes
 CREATE UNIQUE INDEX IF NOT EXISTS idx_timeslot_movie_date_time_screen_unique
 ON "Timeslot"(tmdb_movie_id, show_date, start_time, screen_type)
 WHERE tmdb_movie_id IS NOT NULL;
 
-ALTER TABLE "MovieBooking"
-ADD CONSTRAINT IF NOT EXISTS unique_movie_slot_seat
-UNIQUE (tmdb_movie_id, timeslot_id, seat_id);
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'unique_movie_slot_seat'
+          AND conrelid = to_regclass('"MovieBooking"')
+    ) THEN
+        EXECUTE 'ALTER TABLE "MovieBooking" ADD CONSTRAINT unique_movie_slot_seat UNIQUE (tmdb_movie_id, timeslot_id, seat_id)';
+    END IF;
+END$$;
 
 -- Step 8: Add constraints
-ALTER TABLE "Timeslot"
-ADD CONSTRAINT IF NOT EXISTS check_timeslot_seats
-CHECK (available_seats >= 0 AND available_seats <= total_seats);
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'check_timeslot_seats'
+          AND conrelid = to_regclass('"Timeslot"')
+    ) THEN
+        EXECUTE 'ALTER TABLE "Timeslot" ADD CONSTRAINT check_timeslot_seats CHECK (available_seats >= 0 AND available_seats <= total_seats)';
+    END IF;
+END$$;
 
-ALTER TABLE "Timeslot"
-ADD CONSTRAINT IF NOT EXISTS check_timeslot_total_seats
-CHECK (total_seats > 0);
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'check_timeslot_total_seats'
+          AND conrelid = to_regclass('"Timeslot"')
+    ) THEN
+        EXECUTE 'ALTER TABLE "Timeslot" ADD CONSTRAINT check_timeslot_total_seats CHECK (total_seats > 0)';
+    END IF;
+END$$;
 
-ALTER TABLE "MovieBooking"
-ADD CONSTRAINT IF NOT EXISTS check_screen_type
-CHECK (screen_type IN ('2D', '3D', 'IMAX', '4DX'));
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'check_screen_type'
+          AND conrelid = to_regclass('"MovieBooking"')
+    ) THEN
+        EXECUTE 'ALTER TABLE "MovieBooking" ADD CONSTRAINT check_screen_type CHECK (screen_type IN (''2D'', ''3D'', ''IMAX'', ''4DX''))';
+    END IF;
+END$$;
 
 -- Step 9: Add foreign key constraints
-ALTER TABLE "BookingSeat"
-ADD CONSTRAINT IF NOT EXISTS fk_bookingseat_booking_id
-FOREIGN KEY (booking_id) REFERENCES "MovieBooking"(id) ON DELETE CASCADE;
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'fk_bookingseat_booking_id'
+          AND conrelid = to_regclass('"BookingSeat"')
+    ) THEN
+        EXECUTE 'ALTER TABLE "BookingSeat" ADD CONSTRAINT fk_bookingseat_booking_id FOREIGN KEY (booking_id) REFERENCES "MovieBooking"(id) ON DELETE CASCADE';
+    END IF;
+END$$;
 
 -- Step 10: Create trigger functions for updated_at columns
 CREATE OR REPLACE FUNCTION update_user_updated_at()
@@ -171,13 +223,6 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
-CREATE OR REPLACE FUNCTION update_timeslot_api_log_updated_at()
-RETURNS TRIGGER AS $$
-BEGIN
-    NEW.updated_at = CURRENT_TIMESTAMP;
-    RETURN NEW;
-END;
-$$ language 'plpgsql';
 
 -- Step 11: Create trigger functions for setting timestamps on insert
 CREATE OR REPLACE FUNCTION set_user_timestamps()
@@ -216,14 +261,6 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
-CREATE OR REPLACE FUNCTION set_timeslot_api_log_timestamps()
-RETURNS TRIGGER AS $$
-BEGIN
-    NEW.created_at = COALESCE(NEW.created_at, CURRENT_TIMESTAMP);
-    NEW.updated_at = COALESCE(NEW.updated_at, CURRENT_TIMESTAMP);
-    RETURN NEW;
-END;
-$$ language 'plpgsql';
 
 -- Step 12: Drop existing triggers if they exist
 DROP TRIGGER IF EXISTS update_user_updated_at ON "User";
@@ -234,8 +271,6 @@ DROP TRIGGER IF EXISTS update_moviebooking_updated_at ON "MovieBooking";
 DROP TRIGGER IF EXISTS set_moviebooking_timestamps ON "MovieBooking";
 DROP TRIGGER IF EXISTS update_bookingseat_updated_at ON "BookingSeat";
 DROP TRIGGER IF EXISTS set_bookingseat_timestamps ON "BookingSeat";
-DROP TRIGGER IF EXISTS update_timeslot_api_log_updated_at ON "TimeSlotApiLog";
-DROP TRIGGER IF EXISTS set_timeslot_api_log_timestamps ON "TimeSlotApiLog";
 
 -- Step 13: Create all triggers
 CREATE TRIGGER update_user_updated_at
@@ -278,15 +313,6 @@ CREATE TRIGGER set_bookingseat_timestamps
     FOR EACH ROW
     EXECUTE FUNCTION set_bookingseat_timestamps();
 
-CREATE TRIGGER update_timeslot_api_log_updated_at
-    BEFORE UPDATE ON "TimeSlotApiLog"
-    FOR EACH ROW
-    EXECUTE FUNCTION update_timeslot_api_log_updated_at();
-
-CREATE TRIGGER set_timeslot_api_log_timestamps
-    BEFORE INSERT ON "TimeSlotApiLog"
-    FOR EACH ROW
-    EXECUTE FUNCTION set_timeslot_api_log_timestamps();
 
 -- Step 14: Create sample data (optional - can be commented out for production)
 -- Sample user (password: 'password123' hashed with bcrypt)

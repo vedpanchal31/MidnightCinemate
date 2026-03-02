@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { ThemeToggle } from "@/components/ThemeToggle";
+import TopRightActions from "@/components/TopRightActions";
 
 type WithThemeToggleProps = {
   children?: React.ReactNode;
@@ -13,9 +13,7 @@ export function withThemeToggle<P extends object>(
   function ComponentWithThemeToggle(props: P & WithThemeToggleProps) {
     return (
       <>
-        <div className="fixed right-4 top-4 z-[100]">
-          <ThemeToggle />
-        </div>
+        <TopRightActions />
         <WrappedComponent {...props} />
       </>
     );
