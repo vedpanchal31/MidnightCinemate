@@ -2,12 +2,20 @@
 
 import React, { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, Clock, Calendar, Star, Users } from "lucide-react";
+import {
+  ChevronLeft,
+  Clock,
+  Calendar,
+  Star,
+  Users,
+  AlertTriangle,
+} from "lucide-react";
 import {
   useGetMovieDetailsExtendedQuery,
   useGetTimeSlotsByMovieQuery,
 } from "@/store/moviesApi";
 import { Shimmer, ShimmerText } from "@/components/ui/shimmer";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { TimeSlot } from "@/lib/database/schema";
 import { formatDate } from "@/helpers/HelperFunction";
@@ -581,8 +589,34 @@ export default function MovieDetailsPage({
             </section>
           </div>
         ) : (
-          <div className="text-center py-12 text-zinc-400">
-            Unable to load movie details
+          <div className="text-center py-12">
+            <div className="max-w-md mx-auto">
+              <div className="w-20 h-20 mx-auto mb-6 rounded-2xl bg-red-500/10 border border-red-500/20 flex items-center justify-center">
+                <AlertTriangle className="w-10 h-10 text-red-400" />
+              </div>
+              <h3 className="text-xl font-semibold text-white mb-2">
+                Unable to Load Movie
+              </h3>
+              <p className="text-zinc-400 mb-6">
+                We couldn&apos;t load the movie details. This might be due to a
+                network issue or the movie may not be available.
+              </p>
+              <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                <Button
+                  onClick={() => window.location.reload()}
+                  className="bg-primary hover:bg-primary/90 text-white"
+                >
+                  Try Again
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => router.push("/movies")}
+                  className="border-white/20 text-white hover:bg-white/10"
+                >
+                  Browse Movies
+                </Button>
+              </div>
+            </div>
           </div>
         )}
       </main>

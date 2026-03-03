@@ -10,6 +10,7 @@ import {
   Film,
   CreditCard,
   AlertTriangle,
+  ChevronLeft,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import moment from "moment";
@@ -161,8 +162,15 @@ export default function BookingSummaryPage() {
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white relative overflow-hidden">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(229,9,20,0.2),transparent_45%),radial-gradient(circle_at_80%_0%,rgba(255,255,255,0.08),transparent_35%)]" />
+
       <div className="relative max-w-5xl mx-auto p-4 md:p-8 space-y-5">
-        <div className="space-y-1">
+        <div className="space-y-1 relative">
+          <button
+            onClick={() => router.back()}
+            className="absolute top-3 -left-12 p-2 hover:bg-white/10 rounded-full transition-colors"
+          >
+            <ChevronLeft className="w-6 h-6" />
+          </button>
           <h1 className="text-3xl md:text-4xl font-black tracking-tight">
             Booking Summary
           </h1>
