@@ -944,7 +944,7 @@ export const getBookingSummaryByIds = async (
            FILTER (WHERE bs.seat_id IS NOT NULL),
          '{}'
        ) AS seat_ids,
-       SUM(mb.price)::numeric(10,2) AS amount,
+       MIN(mb.price)::numeric(10,2) AS amount,
        MIN(mb.status) AS status,
        MIN(mb.stripe_session_id) AS stripe_session_id,
        MIN(mb.stripe_payment_id) AS stripe_payment_id,
