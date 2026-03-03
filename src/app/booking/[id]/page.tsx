@@ -13,7 +13,7 @@ import {
   useCreateBookingMutation,
   useGetTimeSlotsByMovieQuery,
 } from "@/store/moviesApi";
-import { ShimmerText } from "@/components/ui/shimmer";
+import { Shimmer, ShimmerText } from "@/components/ui/shimmer";
 import UnauthorizedBookingModal from "@/components/UnauthorizedBookingModal";
 import { RootState } from "@/store/store";
 import { AuthState } from "@/store/authSlice";
@@ -110,7 +110,11 @@ export default function BookingPage({
   const timeParam = searchParams.get("time");
   const slotId = searchParams.get("slotId");
 
-  const { data: dayTimeSlots = [] } = useGetTimeSlotsByMovieQuery(
+  const {
+    data: dayTimeSlots = [],
+    isLoading: timeSlotsLoading,
+    isFetching: timeSlotsFetching,
+  } = useGetTimeSlotsByMovieQuery(
     {
       tmdb_movie_id: movieId ?? 0,
       date_from: dateParam ?? undefined,
@@ -225,10 +229,21 @@ export default function BookingPage({
               <ChevronLeft className="w-6 h-6" />
             </Link>
             <div>
-              <h1 className="text-xl font-bold leading-tight">{movieTitle}</h1>
-              <p className="text-sm text-zinc-400">
-                {theaterName} | {showTime}
-              </p>
+              {timeSlotsLoading || timeSlotsFetching ? (
+                <div className="space-y-2">
+                  <Shimmer className="h-6 w-48 rounded" />
+                  <Shimmer className="h-4 w-32 rounded" />
+                </div>
+              ) : (
+                <>
+                  <h1 className="text-xl font-bold leading-tight">
+                    {movieTitle}
+                  </h1>
+                  <p className="text-sm text-zinc-400">
+                    {theaterName} | {showTime}
+                  </p>
+                </>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-4">
@@ -265,118 +280,171 @@ export default function BookingPage({
         </div>
 
         {/* Legend */}
-        <div className="flex flex-wrap items-center justify-center gap-8 mb-16 px-6 py-3 bg-white/5 backdrop-blur-xl rounded-2xl border border-white/10">
-          <div className="flex items-center gap-3">
-            <div className="w-5 h-5 rounded-md bg-zinc-700/50 border border-white/10" />
-            <span className="text-xs font-medium text-zinc-400">Available</span>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="w-5 h-5 rounded-md bg-primary shadow-[0_0_15px_rgba(229,9,20,0.5)]" />
-            <span className="text-xs font-medium text-white">Selected</span>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="relative w-5 h-5 rounded-md bg-red-950/80 border border-red-500/50 flex items-center justify-center">
-              <X className="w-3 h-3 text-red-300" />
+        {timeSlotsLoading || timeSlotsFetching ? (
+          <div className="flex flex-wrap items-center justify-center gap-8 mb-16 px-6 py-3 bg-white/5 backdrop-blur-xl rounded-2xl border border-white/10">
+            <div className="flex items-center gap-3">
+              <Shimmer className="w-5 h-5 rounded-md" />
+              <Shimmer className="h-4 w-20 rounded" />
             </div>
-            <span className="text-xs font-medium text-red-300">Sold Out</span>
+            <div className="flex items-center gap-3">
+              <Shimmer className="w-5 h-5 rounded-md" />
+              <Shimmer className="h-4 w-16 rounded" />
+            </div>
+            <div className="flex items-center gap-3">
+              <Shimmer className="w-5 h-5 rounded-md" />
+              <Shimmer className="h-4 w-16 rounded" />
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="flex flex-wrap items-center justify-center gap-8 mb-16 px-6 py-3 bg-white/5 backdrop-blur-xl rounded-2xl border border-white/10">
+            <div className="flex items-center gap-3">
+              <div className="w-5 h-5 rounded-md bg-zinc-700/50 border border-white/10" />
+              <span className="text-xs font-medium text-zinc-400">
+                Available
+              </span>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="w-5 h-5 rounded-md bg-primary shadow-[0_0_15px_rgba(229,9,20,0.5)]" />
+              <span className="text-xs font-medium text-white">Selected</span>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="relative w-5 h-5 rounded-md bg-red-950/80 border border-red-500/50 flex items-center justify-center">
+                <X className="w-3 h-3 text-red-300" />
+              </div>
+              <span className="text-xs font-medium text-red-300">Sold Out</span>
+            </div>
+          </div>
+        )}
 
         {/* Seat Grid */}
         <div className="w-full max-w-5xl mx-auto overflow-x-auto py-12 pb-24 custom-scrollbar">
-          <div className="min-w-[600px] flex flex-col items-center gap-4">
-            {seatLayout.rows.map((row, rowIndex) => (
-              <div
-                key={row}
-                className={cn(
-                  "flex items-center gap-6",
-                  rowIndex === 1 || rowIndex === 4 ? "mb-8" : "", // Category separators
-                )}
-              >
-                <div className="w-6 text-xs font-black text-zinc-700 select-none">
-                  {row}
+          {timeSlotsLoading || timeSlotsFetching ? (
+            // Loading shimmer for seat grid
+            <div className="min-w-[600px] flex flex-col items-center gap-4">
+              {seatLayout.rows.map((row, rowIndex) => (
+                <div
+                  key={row}
+                  className={cn(
+                    "flex items-center gap-6",
+                    rowIndex === 1 || rowIndex === 4 ? "mb-8" : "",
+                  )}
+                >
+                  <div className="w-6 text-xs font-black text-zinc-700 select-none">
+                    {row}
+                  </div>
+                  <div className="flex gap-3">
+                    {Array.from({
+                      length: seatLayout.blockSizes.reduce(
+                        (sum, size) => sum + size,
+                        0,
+                      ),
+                    }).map((_, seatIndex) => (
+                      <div
+                        key={seatIndex}
+                        className="w-9 h-9 md:w-10 md:h-10 rounded-xl"
+                      >
+                        <Shimmer className="w-full h-full rounded-xl" />
+                      </div>
+                    ))}
+                  </div>
                 </div>
+              ))}
+            </div>
+          ) : (
+            <div className="min-w-[600px] flex flex-col items-center gap-4">
+              {seatLayout.rows.map((row, rowIndex) => (
+                <div
+                  key={row}
+                  className={cn(
+                    "flex items-center gap-6",
+                    rowIndex === 1 || rowIndex === 4 ? "mb-8" : "", // Category separators
+                  )}
+                >
+                  <div className="w-6 text-xs font-black text-zinc-700 select-none">
+                    {row}
+                  </div>
 
-                <div className="flex gap-3">
-                  {seats
-                    .filter((s) => s.row === row)
-                    .map((seat) => {
-                      const isSelected = selectedSeats.includes(seat.id);
-                      const isBooked = seat.isBooked;
+                  <div className="flex gap-3">
+                    {seats
+                      .filter((s) => s.row === row)
+                      .map((seat) => {
+                        const isSelected = selectedSeats.includes(seat.id);
+                        const isBooked = seat.isBooked;
 
-                      const marginClass = aisleBreakSeatNumbers.includes(
-                        seat.number,
-                      )
-                        ? "mr-10"
-                        : "";
+                        const marginClass = aisleBreakSeatNumbers.includes(
+                          seat.number,
+                        )
+                          ? "mr-10"
+                          : "";
 
-                      return (
-                        <button
-                          key={seat.id}
-                          disabled={isBooked}
-                          onClick={() => handleSeatClick(seat.id, isBooked)}
-                          className={cn(
-                            "relative group w-9 h-9 md:w-10 md:h-10 rounded-xl transition-all duration-300",
-                            marginClass,
-                            isBooked
-                              ? "bg-red-950/80 cursor-not-allowed border border-red-500/50 opacity-90 shadow-[0_0_12px_rgba(239,68,68,0.25)]"
-                              : isSelected
-                                ? "bg-primary text-white scale-110 shadow-[0_0_25px_rgba(229,9,20,0.6)] ring-2 ring-primary/50 ring-offset-4 ring-offset-black z-10"
-                                : cn(
-                                    "bg-white/5 border border-white/10 hover:border-primary/50 hover:bg-primary/10 hover:scale-110 hover:-translate-y-1",
-                                    seat.type === "VIP"
-                                      ? "border-purple-500/30"
-                                      : seat.type === "PREMIUM"
-                                        ? "border-blue-500/30"
-                                        : "",
-                                  ),
-                          )}
-                        >
-                          {/* Sold Out Visual Indicator */}
-                          {isBooked && (
-                            <div className="absolute inset-0 flex items-center justify-center">
-                              <X className="w-5 h-5 text-red-300 opacity-90" />
-                            </div>
-                          )}
-
-                          {/* Seat Number Tooltip */}
-                          <div className="absolute -top-10 left-1/2 -translate-x-1/2 px-2 py-1 bg-zinc-800 rounded text-[9px] font-bold opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none border border-white/10 whitespace-nowrap z-[100]">
-                            {seat.type} {row}
-                            {seat.number} • ₹{seat.price}
-                          </div>
-
-                          {/* Aesthetic chair details */}
-                          <div
+                        return (
+                          <button
+                            key={seat.id}
+                            disabled={isBooked}
+                            onClick={() => handleSeatClick(seat.id, isBooked)}
                             className={cn(
-                              "absolute inset-[2px] rounded-lg flex items-center justify-center overflow-hidden",
-                              isSelected ? "bg-primary" : "bg-transparent",
+                              "relative group w-9 h-9 md:w-10 md:h-10 rounded-xl transition-all duration-300",
+                              marginClass,
+                              isBooked
+                                ? "bg-red-950/80 cursor-not-allowed border border-red-500/50 opacity-90 shadow-[0_0_12px_rgba(239,68,68,0.25)]"
+                                : isSelected
+                                  ? "bg-primary text-white scale-110 shadow-[0_0_25px_rgba(229,9,20,0.6)] ring-2 ring-primary/50 ring-offset-4 ring-offset-black z-10"
+                                  : cn(
+                                      "bg-white/5 border border-white/10 hover:border-primary/50 hover:bg-primary/10 hover:scale-110 hover:-translate-y-1",
+                                      seat.type === "VIP"
+                                        ? "border-purple-500/30"
+                                        : seat.type === "PREMIUM"
+                                          ? "border-blue-500/30"
+                                          : "",
+                                    ),
                             )}
                           >
-                            <span
+                            {/* Sold Out Visual Indicator */}
+                            {isBooked && (
+                              <div className="absolute inset-0 flex items-center justify-center">
+                                <X className="w-5 h-5 text-red-300 opacity-90" />
+                              </div>
+                            )}
+
+                            {/* Seat Number Tooltip */}
+                            <div className="absolute -top-10 left-1/2 -translate-x-1/2 px-2 py-1 bg-zinc-800 rounded text-[9px] font-bold opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none border border-white/10 whitespace-nowrap z-[100]">
+                              {seat.type} {row}
+                              {seat.number} • ₹{seat.price}
+                            </div>
+
+                            {/* Aesthetic chair details */}
+                            <div
                               className={cn(
-                                "text-[10px] font-bold transition-opacity",
-                                isSelected
-                                  ? "opacity-100"
-                                  : "opacity-0 group-hover:opacity-40",
+                                "absolute inset-[2px] rounded-lg flex items-center justify-center overflow-hidden",
+                                isSelected ? "bg-primary" : "bg-transparent",
                               )}
                             >
-                              {seat.number}
-                            </span>
-                          </div>
+                              <span
+                                className={cn(
+                                  "text-[10px] font-bold transition-opacity",
+                                  isSelected
+                                    ? "opacity-100"
+                                    : "opacity-0 group-hover:opacity-40",
+                                )}
+                              >
+                                {seat.number}
+                              </span>
+                            </div>
 
-                          {/* Chair "Legs/Base" for realistic look */}
-                          <div className="absolute bottom-[-2px] left-1/2 -translate-x-1/2 w-[80%] h-[2px] bg-current opacity-20" />
-                        </button>
-                      );
-                    })}
-                </div>
+                            {/* Chair "Legs/Base" for realistic look */}
+                            <div className="absolute bottom-[-2px] left-1/2 -translate-x-1/2 w-[80%] h-[2px] bg-current opacity-20" />
+                          </button>
+                        );
+                      })}
+                  </div>
 
-                <div className="w-6 text-xs font-black text-zinc-700 select-none">
-                  {row}
+                  <div className="w-6 text-xs font-black text-zinc-700 select-none">
+                    {row}
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
       </main>
 

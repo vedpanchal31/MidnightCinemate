@@ -9,6 +9,7 @@ export enum BookingStatus {
   EXPIRED = 4, // timeout → seats released
   CANCELLED = 5, // user/admin cancelled
   REFUNDED = 6, // refund completed
+  COMPLETED = 7, // show finished → booking completed
 }
 
 export interface User {
