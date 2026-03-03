@@ -1142,6 +1142,43 @@ export const expirePendingBookingsBeforeShow = async (): Promise<number> => {
   }
 };
 
+export const completeBookingsAfterShow = async (): Promise<number> => {
+  const client = await db.pool.connect();
+  let updatedBookings: Array<{ id: number; user_id: string }> = [];
+  try {
+    await client.query("BEGIN");
+    const result = await client.query(
+      `UPDATE "MovieBooking"
+       SET status = $1, updated_at = CURRENT_TIMESTAMP
+       WHERE status = $2
+         AND (show_date::timestamp + show_time) <= CURRENT_TIMESTAMP
+       RETURNING id, user_id`,
+      [BookingStatus.COMPLETED, BookingStatus.CONFIRMED],
+    );
+    const updatedIds = result.rows.map((row) => Number(row.id));
+    updatedBookings = result.rows.map((row) => ({
+      id: Number(row.id),
+      user_id: String(row.user_id),
+    }));
+    if (updatedIds.length > 0) {
+      await client.query(
+        `UPDATE "BookingSeat"
+         SET status = $1, updated_at = CURRENT_TIMESTAMP
+         WHERE booking_id = ANY($2)`,
+        [BookingStatus.COMPLETED, updatedIds],
+      );
+    }
+    await client.query("COMMIT");
+    await emitCompletedBookingNotifications(updatedBookings);
+    return result.rowCount || 0;
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+};
+
 // Notification helpers
 export const createNotification = async (payload: {
   user_id: string;
@@ -1408,6 +1445,29 @@ const emitBookingStatusNotifications = async (
         data: { booking_ids: bookingIds },
       });
     }
+  }
+};
+
+const emitCompletedBookingNotifications = async (
+  bookings: Array<{ id: number; user_id: string }>,
+): Promise<void> => {
+  const grouped = new Map<string, number[]>();
+  bookings.forEach((booking) => {
+    if (!booking.user_id || booking.user_id === "guest") return;
+    const existing = grouped.get(booking.user_id) || [];
+    existing.push(booking.id);
+    grouped.set(booking.user_id, existing);
+  });
+
+  for (const [userId, bookingIds] of grouped.entries()) {
+    await createNotification({
+      user_id: userId,
+      type: "booking_completed",
+      title: "Show Completed",
+      message:
+        "Hope you enjoyed the show! Your booking is now marked as completed.",
+      data: { booking_ids: bookingIds },
+    });
   }
 };
 

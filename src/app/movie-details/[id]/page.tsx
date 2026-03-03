@@ -60,15 +60,18 @@ export default function MovieDetailsPage({
     { skip: !movieId },
   );
 
-  const { data: rawTimeSlots = [], isLoading: timeSlotsLoading } =
-    useGetTimeSlotsByMovieQuery(
-      {
-        tmdb_movie_id: movieId ?? 0,
-        date_from: selectedDate,
-        date_to: selectedDate,
-      },
-      { skip: !movieId },
-    );
+  const {
+    data: rawTimeSlots = [],
+    isLoading: timeSlotsLoading,
+    isFetching: timeSlotsFetching,
+  } = useGetTimeSlotsByMovieQuery(
+    {
+      tmdb_movie_id: movieId ?? 0,
+      date_from: selectedDate,
+      date_to: selectedDate,
+    },
+    { skip: !movieId },
+  );
 
   // Safely derive time slots + filter past shows on today
   const timeSlots = useMemo(() => {
@@ -485,7 +488,7 @@ export default function MovieDetailsPage({
                 </div>
 
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2">
-                  {timeSlotsLoading ? (
+                  {timeSlotsLoading || timeSlotsFetching ? (
                     Array.from({ length: 5 }).map((_, i) => (
                       <div
                         key={i}
